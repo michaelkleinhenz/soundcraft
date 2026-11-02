@@ -133,6 +133,7 @@ pub(super) fn path_dialog(id: &str, home: &str, name: &str) -> Option<Dialog> {
         "file.print_score" => ".svg",
         "file.export_clip_groups" => ".scgrp",
         "file.export_session_text" => ".txt",
+        "file.export_chapters" => " Chapters.json",
         _ if id.contains("session") => ".scraft",
         _ => "",
     };

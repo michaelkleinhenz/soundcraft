@@ -123,10 +123,10 @@ fn bounce_refuses_formats_it_cannot_write() {
     let mut e = Engine::default();
     let dir = std::env::temp_dir().join(format!("sc-bounce-ext-{}", std::process::id()));
     assert!(std::fs::create_dir_all(&dir).is_ok());
-    for name in ["mix.mp3", "mix.ogg", "mix.xyz"] {
+    for name in ["mix.m4a", "mix.ogg", "mix.xyz"] {
         let path = dir.join(name);
         let err = e.execute("file.bounce_mix", &json!({"path": path.to_string_lossy(), "start": 0, "end": 480})).map(|_| ()).unwrap_err();
-        assert!(err.to_string().contains("supported: wav"), "{name}: {err}");
+        assert!(err.to_string().contains("supported: wav") && err.to_string().contains("mp3"), "{name}: {err}");
         assert!(!path.exists(), "{name} must not be written");
     }
     let ok = dir.join("mix.flac");

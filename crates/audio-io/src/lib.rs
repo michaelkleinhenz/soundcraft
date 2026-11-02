@@ -18,6 +18,8 @@ mod aiff;
 mod buffer;
 mod caf;
 mod flac;
+pub mod id3;
+pub mod mp3;
 mod mp4;
 mod pcm;
 pub mod peaks;
@@ -69,8 +71,10 @@ impl FileFormat {
     /// The formats [`decode`] reads, found by extension. Contents decide when they disagree.
     pub const READ: &'static [FileFormat] =
         &[FileFormat::Wav, FileFormat::Aiff, FileFormat::Flac, FileFormat::Mp3, FileFormat::Ogg, FileFormat::Aac, FileFormat::Caf, FileFormat::Other];
-    /// The formats [`encode`] writes.
+    /// The formats [`encode`] writes losslessly: what recording, commits and conversions use.
     pub const WRITE: &'static [FileFormat] = &[FileFormat::Wav, FileFormat::Aiff, FileFormat::Flac];
+    /// The formats a mix can be exported to: [`FileFormat::WRITE`] and MP3 (lossy, mono or stereo).
+    pub const EXPORT: &'static [FileFormat] = &[FileFormat::Wav, FileFormat::Aiff, FileFormat::Flac, FileFormat::Mp3];
 
     /// The extensions that name this format, lower case and without the dot; the first is the one
     /// a new file gets. ALAC shares AAC's MP4 container, so a `.m4a` name reads as AAC until the
@@ -147,6 +151,16 @@ impl FileFormat {
         }
     }
 
+    /// The export format ([`FileFormat::EXPORT`]) for an extension or format name (ASCII
+    /// case-insensitive), or `None`.
+    pub fn from_export_extension(ext: &str) -> Option<FileFormat> {
+        let ext = ext.trim_start_matches('.');
+        if ext.eq_ignore_ascii_case("mp3") {
+            return Some(FileFormat::Mp3);
+        }
+        Self::from_write_extension(ext)
+    }
+
     /// The format [`encode`] writes for an extension or format name (ASCII case-insensitive), or
     /// `None` when it writes none.
     pub fn from_write_extension(ext: &str) -> Option<FileFormat> {
@@ -157,6 +171,13 @@ impl FileFormat {
     /// Every extension of [`FileFormat::READ`], in order: what file pickers and browsers filter by.
     pub fn readable_extensions() -> Vec<&'static str> {
         Self::READ.iter().flat_map(|f| f.extensions().iter().copied()).collect()
+    }
+
+    /// Every extension a mix can be exported under ([`FileFormat::EXPORT`]), in order.
+    pub fn export_extensions() -> Vec<&'static str> {
+        let mut v = Self::writable_extensions();
+        v.push("mp3");
+        v
     }
 
     /// Every extension of [`FileFormat::WRITE`], in order: what save dialogs, help and errors list.
@@ -354,6 +375,11 @@ pub fn encode(buf: &AudioBuffer, opts: &EncodeOptions) -> Result<Vec<u8>> {
         FileFormat::Wav => wav::encode(buf, opts.bit_depth, opts.dither, opts.bwf.as_ref(), false, None),
         FileFormat::Aiff => aiff::encode(buf, opts.bit_depth, opts.dither),
         FileFormat::Flac => flac::encode(buf, opts.bit_depth, opts.dither),
+        FileFormat::Mp3 => {
+            let mut w = FileEncoder::new_mp3(std::io::Cursor::new(Vec::new()), &mp3::Mp3Options::default(), buf.channels.len(), buf.sample_rate)?;
+            w.write(&buf.channels, buf.frames())?;
+            Ok(w.finish()?.into_inner())
+        }
         other => Err(AudioError::Unsupported(format!("encoding {other:?} is not supported"))),
     }
 }
@@ -388,6 +414,7 @@ enum Writer<W> {
     Wav(wav::Writer<W>),
     Aiff(aiff::Writer<W>),
     Flac(flac::Writer<W>),
+    Mp3(Box<mp3::Writer<W>>),
 }
 
 impl<W: Write + Seek> FileEncoder<W> {
@@ -406,8 +433,15 @@ impl<W: Write + Seek> FileEncoder<W> {
             )?),
             FileFormat::Aiff => Writer::Aiff(aiff::Writer::new(out, channels, sample_rate, depth, dither)?),
             FileFormat::Flac => Writer::Flac(flac::Writer::new(out, channels, sample_rate, depth, dither)?),
+            FileFormat::Mp3 => Writer::Mp3(Box::new(mp3::Writer::new(out, &mp3::Mp3Options::default(), channels, sample_rate)?)),
             other => return Err(AudioError::Unsupported(format!("encoding {other:?} is not supported"))),
         }))
+    }
+
+    /// Starts an MP3 at the current position of `out`: `opts` sets the bitrate and the ID3 tag
+    /// written before the audio.
+    pub fn new_mp3(out: W, opts: &mp3::Mp3Options, channels: usize, sample_rate: u32) -> Result<Self> {
+        Ok(FileEncoder(Writer::Mp3(Box::new(mp3::Writer::new(out, opts, channels, sample_rate)?))))
     }
 
     /// Fails, without writing anything, when `frames` more frames would not fit the format (an
@@ -417,6 +451,8 @@ impl<W: Write + Seek> FileEncoder<W> {
             Writer::Wav(w) => w.check_room(frames),
             Writer::Aiff(w) => w.check_room(frames),
             Writer::Flac(w) => w.check_room(frames),
+            // A frame-count-free stream: only the bounce's own length limit applies.
+            Writer::Mp3(_) => Ok(0),
         }
         .map(drop)
     }
@@ -430,6 +466,7 @@ impl<W: Write + Seek> FileEncoder<W> {
             Writer::Wav(w) => w.write(block, frames),
             Writer::Aiff(w) => w.write(block, frames),
             Writer::Flac(w) => w.write(block, frames),
+            Writer::Mp3(w) => w.write(block, frames),
         }
     }
 
@@ -439,6 +476,7 @@ impl<W: Write + Seek> FileEncoder<W> {
             Writer::Wav(w) => w.finish(),
             Writer::Aiff(w) => w.finish(),
             Writer::Flac(w) => w.finish(),
+            Writer::Mp3(w) => w.finish(),
         }
     }
 }

@@ -160,3 +160,218 @@ mod tests {
         }
     }
 }
+
+// ---- chapters ---------------------------------------------------------------------------------
+
+/// A chapter of an export: where it starts and ends relative to the export's start, its title and
+/// an optional link.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Chapter {
+    pub start: soundcraft_time::Samples,
+    pub end: soundcraft_time::Samples,
+    pub title: String,
+    pub url: Option<String>,
+}
+
+/// The first `http(s)://` word of a marker's comments: its chapter link.
+fn chapter_url(comments: &str) -> Option<String> {
+    comments.split_whitespace().find(|w| w.starts_with("https://") || w.starts_with("http://")).map(str::to_string)
+}
+
+/// The chapters of an export of `range`: one per marker (or stored selection) starting inside it,
+/// in time order, each running to the next one or the end of the range. Markers at the same
+/// position collapse into the first; times are relative to `range.start`.
+pub fn chapters(s: &Session, range: soundcraft_time::Range) -> Vec<Chapter> {
+    let mut marks: Vec<&soundcraft_model::MemoryLocation> = s
+        .markers
+        .iter()
+        .filter(|m| matches!(m.kind, soundcraft_model::MarkerKind::Marker | soundcraft_model::MarkerKind::Selection))
+        .filter(|m| m.start >= range.start && m.start < range.end)
+        .collect();
+    marks.sort_by_key(|m| m.start);
+    marks.dedup_by_key(|m| m.start);
+    let mut out: Vec<Chapter> = marks
+        .iter()
+        .map(|m| Chapter { start: m.start - range.start, end: range.len(), title: m.name.clone(), url: chapter_url(&m.comments) })
+        .collect();
+    let starts: Vec<soundcraft_time::Samples> = out.iter().skip(1).map(|c| c.start).collect();
+    for (c, next) in out.iter_mut().zip(starts) {
+        c.end = next;
+    }
+    out
+}
+
+/// Seconds, rounded to the millisecond.
+fn seconds(s: &Session, at: soundcraft_time::Samples) -> f64 {
+    (s.sample_rate.seconds(at) * 1000.0).round() / 1000.0
+}
+
+/// Podcasting 2.0 chapters JSON (`application/json+chapters`, version 1.2.0).
+pub fn chapters_json(s: &Session, chapters: &[Chapter]) -> serde_json::Value {
+    let list: Vec<serde_json::Value> = chapters
+        .iter()
+        .map(|c| {
+            let mut v = serde_json::json!({"startTime": seconds(s, c.start), "endTime": seconds(s, c.end), "title": c.title});
+            if let (Some(url), Some(obj)) = (&c.url, v.as_object_mut()) {
+                obj.insert("url".into(), serde_json::Value::String(url.clone()));
+            }
+            v
+        })
+        .collect();
+    let mut doc = serde_json::json!({"version": "1.2.0", "chapters": list});
+    if let Some(obj) = doc.as_object_mut() {
+        for (key, value) in [("title", &s.episode.title), ("podcastName", &s.episode.show), ("author", &s.episode.author)] {
+            if !value.is_empty() {
+                obj.insert(key.into(), serde_json::Value::String(value.clone()));
+            }
+        }
+    }
+    doc
+}
+
+/// Chapters as show-notes lines (`00:00 Intro`, or `0:00:00 Intro` past an hour): the form video
+/// sites and most podcast apps turn into links.
+pub fn chapters_text(s: &Session, chapters: &[Chapter]) -> String {
+    let long = chapters.iter().any(|c| s.sample_rate.seconds(c.end) >= 3600.0);
+    let mut out = String::new();
+    for c in chapters {
+        let total = s.sample_rate.seconds(c.start).max(0.0).floor() as u64;
+        let (h, m, sec) = (total / 3600, (total / 60) % 60, total % 60);
+        let stamp = if long { format!("{h}:{m:02}:{sec:02}") } else { format!("{:02}:{sec:02}", total / 60) };
+        out.push_str(&stamp);
+        out.push(' ');
+        out.push_str(&c.title);
+        if let Some(url) = &c.url {
+            out.push_str(" — ");
+            out.push_str(url);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+// ---- ID3 tags ---------------------------------------------------------------------------------
+
+/// Milliseconds for a tag, saturating at what ID3 can hold.
+fn millis(s: &Session, at: soundcraft_time::Samples) -> u32 {
+    let ms = (s.sample_rate.seconds(at.max(0)) * 1000.0).round();
+    if ms.is_finite() && ms < f64::from(u32::MAX) { ms as u32 } else { u32::MAX - 1 }
+}
+
+/// The artwork file `path` names, absolute or relative to the session folder.
+pub fn artwork_path(s: &Session, path: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(path.trim());
+    match &s.folder {
+        Some(dir) if p.is_relative() => dir.join(p),
+        _ => p.to_path_buf(),
+    }
+}
+
+/// The ID3 tag an MP3 export of `range` carries: the episode details, its cover art and the
+/// chapters inside the range.
+pub fn id3_tag(s: &Session, range: soundcraft_time::Range) -> crate::Result<soundcraft_audio_io::id3::Id3Tag> {
+    let e = &s.episode;
+    let artwork = if e.artwork.trim().is_empty() {
+        None
+    } else {
+        let path = artwork_path(s, &e.artwork);
+        let len = std::fs::metadata(&path).map_err(|err| crate::EngineError::Io(format!("cover art {}: {err}", path.display())))?.len();
+        if len > soundcraft_audio_io::id3::MAX_ARTWORK_BYTES as u64 {
+            return Err(crate::EngineError::Io(format!("cover art {} is larger than 10 MiB", path.display())));
+        }
+        let bytes = std::fs::read(&path).map_err(|err| crate::EngineError::Io(format!("cover art {}: {err}", path.display())))?;
+        Some(
+            soundcraft_audio_io::id3::Id3Artwork::from_bytes(bytes)
+                .map_err(|err| crate::EngineError::Io(format!("cover art {}: {err}", path.display())))?,
+        )
+    };
+    let mut comment = e.description.clone();
+    if e.explicit && !comment.is_empty() {
+        comment.insert_str(0, "[Explicit] ");
+    }
+    Ok(soundcraft_audio_io::id3::Id3Tag {
+        title: e.title.clone(),
+        album: e.show.clone(),
+        artist: e.author.clone(),
+        track: e.episode,
+        disc: e.season,
+        year: e.year().unwrap_or_default().to_string(),
+        comment,
+        genre: if e.is_empty() { String::new() } else { "Podcast".into() },
+        artwork,
+        chapters: chapters(s, range)
+            .into_iter()
+            .map(|c| soundcraft_audio_io::id3::Id3Chapter { start_ms: millis(s, c.start), end_ms: millis(s, c.end), title: c.title, url: c.url })
+            .collect(),
+    })
+}
+
+#[cfg(test)]
+mod chapter_tests {
+    use super::*;
+    use soundcraft_model::MarkerKind;
+    use soundcraft_time::Range;
+
+    fn session() -> Session {
+        let mut s = Session::new("Ep", SampleRate::HZ_48000);
+        let sec = |x: f64| s.sample_rate.samples(x);
+        let (a, b, c, d) = (sec(0.0), sec(65.5), sec(65.5), sec(130.0));
+        s.add_marker("Intro", MarkerKind::Marker, a, a);
+        let id = s.add_marker("News", MarkerKind::Marker, b, b);
+        if let Some(m) = s.markers.iter_mut().find(|m| m.id == id) {
+            m.comments = "see https://example.com/news for more".into();
+        }
+        s.add_marker("Duplicate", MarkerKind::Marker, c, c);
+        s.add_marker("Outro", MarkerKind::Selection, d, d + 10);
+        s
+    }
+
+    #[test]
+    fn markers_become_chapters_that_run_to_the_next_one() {
+        let s = session();
+        let end = s.sample_rate.samples(150.0);
+        let ch = chapters(&s, Range::new(0, end));
+        let titles: Vec<&str> = ch.iter().map(|c| c.title.as_str()).collect();
+        assert_eq!(titles, ["Intro", "News", "Outro"], "markers at one position collapse into the first");
+        assert_eq!(ch[0].end, ch[1].start);
+        assert_eq!(ch[2].end, end);
+        assert_eq!(ch[1].url.as_deref(), Some("https://example.com/news"));
+        // Relative to the range start; markers before it are left out.
+        let later = chapters(&s, Range::new(s.sample_rate.samples(60.0), end));
+        assert_eq!(later.first().map(|c| (c.title.as_str(), c.start)), Some(("News", s.sample_rate.samples(5.5))));
+    }
+
+    #[test]
+    fn chapters_export_as_podcasting_json_and_show_notes() {
+        let mut s = session();
+        s.episode.title = "Ep 1".into();
+        let ch = chapters(&s, Range::new(0, s.sample_rate.samples(150.0)));
+        let json = chapters_json(&s, &ch);
+        assert_eq!(json["version"], "1.2.0");
+        assert_eq!(json["title"], "Ep 1");
+        assert_eq!(json["chapters"][1]["startTime"], 65.5);
+        assert_eq!(json["chapters"][1]["url"], "https://example.com/news");
+        assert!(json["chapters"][0].get("url").is_none());
+        assert_eq!(chapters_text(&s, &ch), "00:00 Intro\n01:05 News — https://example.com/news\n02:10 Outro\n");
+        let long = chapters(&s, Range::new(0, s.sample_rate.samples(4000.0)));
+        assert!(chapters_text(&s, &long).starts_with("0:00:00 Intro\n0:01:05 News"));
+    }
+
+    #[test]
+    fn the_id3_tag_carries_the_episode_and_its_chapters() {
+        let mut s = session();
+        s.episode.title = "Ep 1".into();
+        s.episode.show = "Show".into();
+        s.episode.episode = Some(1);
+        s.episode.date = "2026-11-02".into();
+        let tag = id3_tag(&s, Range::new(0, s.sample_rate.samples(150.0))).unwrap();
+        assert_eq!(
+            (tag.title.as_str(), tag.album.as_str(), tag.track, tag.year.as_str(), tag.genre.as_str()),
+            ("Ep 1", "Show", Some(1), "2026", "Podcast")
+        );
+        assert_eq!(tag.chapters.iter().map(|c| c.start_ms).collect::<Vec<_>>(), [0, 65_500, 130_000]);
+        assert_eq!(tag.chapters[2].end_ms, 150_000);
+        s.episode.artwork = "/definitely/missing.jpg".into();
+        assert!(id3_tag(&s, Range::new(0, 10)).unwrap_err().to_string().contains("cover art"));
+    }
+}

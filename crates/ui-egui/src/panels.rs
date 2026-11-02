@@ -8,6 +8,7 @@ use soundcraft_model::{ClipId, SourceId};
 
 mod about;
 mod clips;
+mod episode;
 mod history;
 mod memory;
 mod plugins;
@@ -92,4 +93,5 @@ pub fn floating(app: &mut SoundApp, ctx: &egui::Context) {
     crate::mix_window::send_window(app, ctx);
     about(app, ctx);
     session_info(app, ctx);
+    episode::episode_info(app, ctx);
 }

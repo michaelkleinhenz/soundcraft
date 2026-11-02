@@ -88,6 +88,10 @@ pub struct UiState {
     pub show_session_info: bool,
     pub show_audio_health: bool,
     pub show_about: bool,
+    /// File › Episode Info, and the edits not applied yet.
+    pub show_episode_info: bool,
+    #[serde(skip)]
+    pub episode_draft: Option<soundcraft_model::EpisodeInfo>,
     pub show_midi_editor: bool,
     pub show_universe: bool,
     pub narrow_mix: bool,
@@ -172,6 +176,8 @@ impl Default for UiState {
             show_session_info: false,
             show_audio_health: false,
             show_about: false,
+            show_episode_info: false,
+            episode_draft: None,
             show_midi_editor: false,
             show_universe: false,
             narrow_mix: false,

@@ -35,7 +35,7 @@ When you close a gap, delete its entry (or shrink it) in the same PR, and bump t
 | G-18 | Speech-to-text transcription | AI | this file | 30–50 |
 | G-19 | UI feel: generic plugin windows, shortcut collisions, pro-grade meters and scaling | UI/UX | [ui-parity.md](ui-parity.md) | 60–100 |
 | G-20 | MIDI/instrument depth: MIDI learn, notation editing | Features | [target-app-parity.md](target-app-parity.md) | 40–60 |
-| G-21 | Compressed export (MP3, AAC/M4A, Ogg/Opus) | File formats | [file-format-parity.md](file-format-parity.md) | 10–20 |
+| G-21 | Compressed export (AAC/M4A, Ogg/Opus; MP3 done) | File formats | [file-format-parity.md](file-format-parity.md) | 10–20 |
 | G-22 | Avid cloud services (collaboration, Sketch, Splice, sign-in) | Ecosystem | — | not estimated (owner decision) |
 
 ## Details
@@ -218,7 +218,7 @@ articulations, parts). ≈ 40–60 h.
 
 ### G-21. Compressed export
 
-Bounce writes WAV/BWF/RF64, AIFF and FLAC; Pro Tools also writes MP3 and AAC/M4A in Bounce Mix.
+Bounce writes WAV/BWF/RF64, AIFF, FLAC and MP3; Pro Tools also writes AAC/M4A in Bounce Mix.
 ≈ 10–20 h (pure-Rust encoders).
 
 ### G-22. Avid cloud services

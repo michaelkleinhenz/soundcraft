@@ -253,6 +253,41 @@ impl Bounce {
         normalize: bool,
         fold_stereo: bool,
     ) -> Result<Bounce> {
+        let opts = opts.clone();
+        Bounce::start(s, path, r, bus, normalize, fold_stereo, move |out, channels, rate, mask| {
+            soundcraft_audio_io::FileEncoder::new(out, &opts, channels, rate, Some(mask))
+        })
+    }
+
+    /// Like [`Bounce::new`], writing an MP3 with `opts`' bitrate and ID3 tag. MP3 holds mono or
+    /// stereo at the Layer III sample rates; anything else fails before a file is created.
+    pub fn new_mp3(
+        s: Arc<Session>,
+        path: &Path,
+        r: Range,
+        opts: &soundcraft_audio_io::mp3::Mp3Options,
+        bus: Option<BusId>,
+        normalize: bool,
+        fold_stereo: bool,
+    ) -> Result<Bounce> {
+        let (_, channels, _) = bounce_layout(&s, bus, fold_stereo);
+        soundcraft_audio_io::mp3::check(channels, s.sample_rate.hz())
+            .map_err(|err| EngineError::BadParams("file.bounce_mix".into(), err.to_string()))?;
+        let opts = opts.clone();
+        Bounce::start(s, path, r, bus, normalize, fold_stereo, move |out, channels, rate, _| {
+            soundcraft_audio_io::FileEncoder::new_mp3(out, &opts, channels, rate)
+        })
+    }
+
+    fn start(
+        s: Arc<Session>,
+        path: &Path,
+        r: Range,
+        bus: Option<BusId>,
+        normalize: bool,
+        fold_stereo: bool,
+        encoder: impl FnOnce(Out, usize, u32, u32) -> std::result::Result<soundcraft_audio_io::FileEncoder<Out>, soundcraft_audio_io::AudioError>,
+    ) -> Result<Bounce> {
         if r.len() > s.sample_rate.samples(MAX_BOUNCE_SECS) {
             return Err(EngineError::BadParams("file.bounce_mix".into(), "bounces are limited to 4 hours".into()));
         }
@@ -262,7 +297,7 @@ impl Bounce {
         crate::file_access::check_write(path).map_err(EngineError::Io)?;
         crate::file_access::check_write(&part).map_err(EngineError::Io)?;
         let enc = (|| -> std::result::Result<_, soundcraft_audio_io::AudioError> {
-            let enc = soundcraft_audio_io::FileEncoder::new(Out::create(&part)?, opts, channels, s.sample_rate.hz(), Some(fmt.channel_mask()))?;
+            let enc = encoder(Out::create(&part)?, channels, s.sample_rate.hz(), fmt.channel_mask())?;
             enc.check_room(u64::try_from(r.len()).unwrap_or(0))?;
             Ok(enc)
         })()
@@ -731,7 +766,7 @@ pub fn replaces(e: &Engine, command: &str, file: &Path) -> bool {
         "session.save" | "session.save_as" | "session.save_copy" => {
             file.exists() && !e.path.as_deref().is_some_and(|own| same_path(Path::new(own), file))
         }
-        "session.save_template" | "file.export_selected_tracks_as_session" | "file.export_session_text" => file.exists(),
+        "session.save_template" | "file.export_selected_tracks_as_session" | "file.export_session_text" | "file.export_chapters" => file.exists(),
         _ => false,
     }
 }

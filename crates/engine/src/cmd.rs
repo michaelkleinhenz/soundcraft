@@ -25,6 +25,7 @@ mod mix;
 mod more_util;
 mod options;
 mod plugin_state;
+mod podcast;
 mod query;
 pub(crate) mod sampler;
 mod setup_more;
@@ -162,6 +163,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(video::specs());
         v.extend(zoom_toggle::specs());
         v.extend(strip_silence::specs());
+        v.extend(podcast::specs());
         #[cfg(test)]
         v.extend(panic_probe::specs());
         v

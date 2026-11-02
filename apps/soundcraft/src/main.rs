@@ -163,13 +163,14 @@ fn services() -> Services {
             let d = match purpose {
                 "session.open" => d.add_filter("PodCraft Session", &["scraft"]),
                 "file.import_midi" => d.add_filter("MIDI", &["mid", "midi", "smf"]),
+                "episode.artwork" => d.add_filter("Cover art", &["jpg", "jpeg", "png"]),
                 _ => d.add_filter("Audio", &FileFormat::readable_extensions()),
             };
             d.pick_file()
         })),
         pick_save: Some(Box::new(|purpose: &str, path: &std::path::Path| {
             let mut d = match purpose {
-                "file.bounce_mix" => rfd::FileDialog::new().add_filter("Audio", &FileFormat::writable_extensions()),
+                "file.bounce_mix" => rfd::FileDialog::new().add_filter("Audio", &FileFormat::export_extensions()),
                 _ => rfd::FileDialog::new().add_filter("PodCraft Session", &["scraft"]),
             };
             if let Some(dir) = path.parent().filter(|dir| dir.is_dir()) {

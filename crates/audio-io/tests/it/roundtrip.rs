@@ -202,9 +202,14 @@ fn unusual_sample_rates_roundtrip() {
 fn encode_rejects_bad_buffers_and_formats() {
     assert!(encode(&AudioBuffer::default(), &EncodeOptions::default()).is_err());
     assert!(encode(&AudioBuffer::new(0, 2, 10), &EncodeOptions::default()).is_err());
-    for f in [FileFormat::Mp3, FileFormat::Ogg, FileFormat::Aac, FileFormat::Alac, FileFormat::Caf, FileFormat::Other] {
+    for f in [FileFormat::Ogg, FileFormat::Aac, FileFormat::Alac, FileFormat::Caf, FileFormat::Other] {
         assert!(encode(&sine(48_000, 1, 10), &EncodeOptions { format: f, ..EncodeOptions::default() }).is_err());
     }
+    // MP3 is written, but only at the rates and channel counts it can hold.
+    let mp3 = EncodeOptions { format: FileFormat::Mp3, ..EncodeOptions::default() };
+    assert!(encode(&sine(48_000, 1, 10), &mp3).is_ok());
+    assert!(encode(&sine(96_000, 1, 10), &mp3).is_err());
+    assert!(encode(&AudioBuffer::new(48_000, 6, 10), &mp3).is_err());
     // Non-finite samples are sanitized; only integer output clips finite samples.
     let mut b = AudioBuffer::new(48_000, 1, 4);
     b.channels[0] = vec![f32::NAN, f32::INFINITY, -5.0, 0.5];
