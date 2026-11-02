@@ -100,10 +100,7 @@ pub fn open_session_bytes(e: &mut Engine, name: &str, bytes: &[u8]) -> Result<Ve
     let (text, mut files) = if bytes.starts_with(b"PK\x03\x04") {
         read_bundle(bytes, BUNDLE_LIMITS)?
     } else {
-        (
-            String::from_utf8(bytes.to_vec()).map_err(|_| EngineError::Io(format!("{name}: not a SoundCraft session")))?,
-            std::collections::HashMap::new(),
-        )
+        (String::from_utf8(bytes.to_vec()).map_err(|_| EngineError::Io(format!("{name}: not a PodCraft session")))?, std::collections::HashMap::new())
     };
     let mut s = Session::from_json(&text).map_err(|err| EngineError::Io(format!("{name}: {err}")))?;
     let mut missing = Vec::new();
