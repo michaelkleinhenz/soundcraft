@@ -82,6 +82,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("window.preflight", "Episode Pre-flight Check", "", None),
     ("window.sync_recordings", "Sync Remote Recordings", "", None),
     ("window.segments", "Insert Segment", "", None),
+    ("window.templates", "Episode Templates", "", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -416,6 +417,7 @@ fn checked_state(app: &SoundApp, path: &str, id: Option<&str>) -> bool {
         Some("window.preflight") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Preflight),
         Some("window.sync_recordings") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Sync),
         Some("window.segments") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Segments),
+        Some("window.templates") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Templates),
         Some("window.renderer") => app.extra.show_renderer,
         Some("window.ui_customization") => app.extra.show_ui_customization,
         Some("window.config_auto_update") => app.extra.auto_update_config,
@@ -488,6 +490,7 @@ const MENU_WINDOWS: &[(&str, &str)] = &[
     ("File > Episode Pre-flight Check...", "window.preflight"),
     ("Track > Sync Remote Recordings...", "window.sync_recordings"),
     ("Edit > Insert Segment...", "window.segments"),
+    ("File > Episode Templates...", "window.templates"),
     ("Setup > Appearance", "window.ui_customization"),
     ("Setup > Hardware...", "window.playback_engine"),
     ("Setup > Playback Engine...", "window.playback_engine"),
@@ -618,12 +621,13 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
             toggle(&mut app.ui.show_audio_health)
         }
         "window.about" => toggle(&mut app.ui.show_about),
-        "window.tighten_pauses" | "window.auto_duck" | "window.preflight" | "window.sync_recordings" | "window.segments" => {
+        "window.tighten_pauses" | "window.auto_duck" | "window.preflight" | "window.sync_recordings" | "window.segments" | "window.templates" => {
             let tool = match id {
                 "window.tighten_pauses" => crate::panels::PodcastTool::Pauses,
                 "window.auto_duck" => crate::panels::PodcastTool::Duck,
                 "window.sync_recordings" => crate::panels::PodcastTool::Sync,
                 "window.segments" => crate::panels::PodcastTool::Segments,
+                "window.templates" => crate::panels::PodcastTool::Templates,
                 _ => crate::panels::PodcastTool::Preflight,
             };
             let on = p.get("value").and_then(Value::as_bool).unwrap_or(app.ui.podcast_tools != Some(tool));

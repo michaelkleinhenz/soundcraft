@@ -46,6 +46,31 @@ menu item.
 - a **Master** with a limiter (ceiling -1.5 dBFS);
 - Min:Secs and Markers rulers.
 
+## Episode templates
+
+**File ▸ Episode Templates…** (also **From a Template…** on the welcome card). A template is an
+episode's set-up without its recordings: the tracks with their formats, names, colours and heights,
+routing, levels, busses and groups, every plugin chain with its settings, the **export settings**
+and the show's details (show, author, cover art, explicit). Clips, sources, markers, automation
+points and this episode's title, number, date and notes are left out.
+
+- **New Episode** on a row starts a session from it (asking to save the open one first).
+  Built-ins: **Interview** (Host, Guest), **Solo show** (Host) and **Panel** (Host and three
+  guests), each the New Episode set-up with podcast export settings.
+- **Save Template** writes the open session as `<name>.pctemplate` (JSON) into the templates
+  folder, by default `PodCraft Templates` in the home folder (changeable in the window, kept with
+  the app settings). Saving over an existing name asks once.
+
+Commands: `template.list {dir?}`, `template.new {template: interview|solo|panel|<path>, name?,
+sample_rate?}`, `template.save {path, name?, description?, replace?}`.
+
+### Export settings
+
+`session.export_settings {format?: wav|aiff|flac|mp3, bit_depth?: 16|24|32f, loudness?:
+podcast|podcast_mono|video|broadcast|off, bitrate?, normalize?, dither?, clear?}` keeps the
+session's export choices. Bounce Mix opens with them, and a bounce with different choices stores
+the new ones (one undo step), so a template saved afterwards carries them.
+
 ## Loudness-target export
 
 **File ▸ Bounce Mix… ▸ Loudness** (Podcast, stereo is the default in Podcast mode), or

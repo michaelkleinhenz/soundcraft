@@ -362,6 +362,9 @@ pub struct Session {
     /// The podcast episode this session produces (title, show, artwork...).
     #[serde(default)]
     pub episode: crate::EpisodeInfo,
+    /// The export settings Bounce Mix last used (and episode templates carry); `None` until set.
+    #[serde(default)]
+    pub export: Option<crate::ExportSettings>,
     /// Original MIDI performances keyed by clip id (Event › MIDI Operations › Restore/Flatten
     /// Performance). Independent of undo so a restore survives later edits.
     #[serde(default)]
@@ -404,6 +407,7 @@ impl Session {
             next_id: 1,
             comments: String::new(),
             episode: crate::EpisodeInfo::default(),
+            export: None,
             midi_originals: std::collections::BTreeMap::new(),
             pool: SourcePool::default(),
             folder: None,

@@ -162,6 +162,10 @@ pub struct UiState {
     /// episodes (they are files, so the list lives with the settings, not the session).
     #[serde(default)]
     pub segment_library: Vec<crate::panels::LibrarySegment>,
+    /// File › Episode Templates' folder of `.pctemplate` files; empty means "PodCraft Templates" in
+    /// the home folder.
+    #[serde(default)]
+    pub template_dir: String,
 }
 
 /// What a settings file without `podcast_mode` reads as: PodCraft starts in Podcast mode.
@@ -234,6 +238,7 @@ impl Default for UiState {
             ui_scale: 1.0,
             podcast_mode: false,
             segment_library: Vec::new(),
+            template_dir: String::new(),
         }
     }
 }

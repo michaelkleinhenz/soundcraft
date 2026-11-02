@@ -250,7 +250,7 @@ pub fn command(app: &mut SoundApp, p: &Value) -> Value {
 /// Episode template), opens a session or imports recordings.
 pub fn welcome(app: &mut SoundApp, ui: &mut egui::Ui, area: egui::Rect) {
     let t = crate::theme::Tokens::current();
-    let card = egui::Rect::from_center_size(area.center(), egui::vec2(360.0, 200.0).min(area.size()));
+    let card = egui::Rect::from_center_size(area.center(), egui::vec2(360.0, 230.0).min(area.size()));
     if card.width() < 120.0 || card.height() < 80.0 {
         return;
     }
@@ -264,6 +264,9 @@ pub fn welcome(app: &mut SoundApp, ui: &mut egui::Ui, area: egui::Rect) {
             let mut pick = None;
             if ui.add(egui::Button::new("New Episode…").min_size(egui::vec2(180.0, 26.0))).clicked() {
                 pick = Some("session.new");
+            }
+            if ui.add(egui::Button::new("From a Template…").min_size(egui::vec2(180.0, 22.0))).clicked() {
+                pick = Some("window.templates");
             }
             if ui.add(egui::Button::new("Import Recordings…").min_size(egui::vec2(180.0, 22.0))).clicked() {
                 pick = Some("file.import_audio");

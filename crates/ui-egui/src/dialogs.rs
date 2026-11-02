@@ -263,14 +263,29 @@ impl Dialogs {
                     .and_then(|p| std::path::Path::new(p).parent())
                     .filter(|d| !d.as_os_str().is_empty())
                     .map_or(home.clone(), |d| d.display().to_string());
-                Dialog::Bounce {
-                    path: format!("{dir}/{name} Bounce.wav"),
-                    format: FileFormat::Wav,
-                    bit_depth: "24".into(),
-                    normalize: false,
-                    dither: false,
-                    loudness: None,
-                    bitrate: soundcraft_audio_io::mp3::DEFAULT_BITRATE,
+                // The session's export settings (from its template or its last bounce) come first.
+                match &e.session().export {
+                    Some(x) => {
+                        let format = FileFormat::from_extension(&x.format).filter(|f| FileFormat::EXPORT.contains(f)).unwrap_or(FileFormat::Wav);
+                        Dialog::Bounce {
+                            path: format!("{dir}/{name} Bounce.{}", format.default_extension()),
+                            format,
+                            bit_depth: x.bit_depth.clone(),
+                            normalize: x.normalize,
+                            dither: x.dither,
+                            loudness: Some(x.loudness.clone()),
+                            bitrate: x.bitrate,
+                        }
+                    }
+                    None => Dialog::Bounce {
+                        path: format!("{dir}/{name} Bounce.wav"),
+                        format: FileFormat::Wav,
+                        bit_depth: "24".into(),
+                        normalize: false,
+                        dither: false,
+                        loudness: None,
+                        bitrate: soundcraft_audio_io::mp3::DEFAULT_BITRATE,
+                    },
                 }
             }
             "file.import_audio" => Dialog::PathPrompt { cmd: id.into(), title: "Import Audio".into(), path: home, key: "path".into() },
@@ -693,6 +708,16 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                             .color(Tokens::current().text_dim),
                     );
                     if buttons(ui, "Bounce", enter) {
+                        // Remembered with the session (and so in templates made from it) when changed.
+                        let chosen = soundcraft_model::ExportSettings {
+                            format: format.default_extension().to_string(),
+                            bit_depth: bit_depth.clone(),
+                            loudness: loudness.clone(),
+                            bitrate: *bitrate,
+                            normalize: *normalize,
+                            dither: *dither,
+                        };
+                        remember_export(app, &chosen);
                         let p = std::path::Path::new(path.as_str()).with_extension(format.default_extension());
                         crate::bounce::start(
                             app,
@@ -978,6 +1003,13 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
     }
     if keep {
         app.dialogs.open = Some(d);
+    }
+}
+
+/// Stores Bounce Mix's choices as the session's export settings when they changed.
+fn remember_export(app: &mut SoundApp, chosen: &soundcraft_model::ExportSettings) {
+    if app.engine.session().export.as_ref() != Some(chosen) {
+        let _ = app.run("session.export_settings", serde_json::to_value(chosen).unwrap_or_default());
     }
 }
 

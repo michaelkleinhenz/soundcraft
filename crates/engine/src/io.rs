@@ -85,6 +85,23 @@ pub(crate) fn make_dir(dir: impl AsRef<Path>) -> Result<()> {
     std::fs::create_dir_all(dir).map_err(|err| EngineError::Io(format!("{}: {err}", dir.display())))
 }
 
+/// The files in `dir` with extension `ext` (sorted), inside the read roots; none when the folder
+/// can't be read or doesn't exist.
+pub(crate) fn files_in(dir: &Path, ext: &str) -> Vec<PathBuf> {
+    if cfg!(target_arch = "wasm32") || crate::file_access::check_read(dir).is_err() {
+        return Vec::new();
+    }
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|p| p.extension().and_then(OsStr::to_str) == Some(ext))
+        .collect();
+    out.sort();
+    out
+}
+
 /// Write `bytes` to the file at `path`, inside the automation write root when there is one.
 pub(crate) fn write_path(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> Result<()> {
     let path = path.as_ref();
@@ -783,7 +800,11 @@ pub fn replaces(e: &Engine, command: &str, file: &Path) -> bool {
         "session.save" | "session.save_as" | "session.save_copy" => {
             file.exists() && !e.path.as_deref().is_some_and(|own| same_path(Path::new(own), file))
         }
-        "session.save_template" | "file.export_selected_tracks_as_session" | "file.export_session_text" | "file.export_chapters" => file.exists(),
+        "session.save_template"
+        | "template.save"
+        | "file.export_selected_tracks_as_session"
+        | "file.export_session_text"
+        | "file.export_chapters" => file.exists(),
         _ => false,
     }
 }

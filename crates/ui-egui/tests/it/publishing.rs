@@ -126,6 +126,7 @@ fn the_podcast_tools_open_from_their_menus() {
         "Track > Sync Remote Recordings...",
         "Edit > Insert Segment...",
         "Edit > Add Ad Slot Marker",
+        "File > Episode Templates...",
     ] {
         assert!(has(&tree, path), "{path} missing");
     }
@@ -172,6 +173,7 @@ fn every_podcast_tool_window_draws_with_named_controls() {
         ("mix.auto_duck", "Track > Auto-Duck Music..."),
         ("track.sync_recordings", "Track > Sync Remote Recordings..."),
         ("segment.insert", "Edit > Insert Segment..."),
+        ("template.list", "File > Episode Templates..."),
     ] {
         let mut app = SoundApp::new(soundcraft_engine::demo::demo_engine(), None, Services::default());
         menus::invoke_menu(&mut app, cmd, path);
@@ -180,4 +182,36 @@ fn every_podcast_tool_window_draws_with_named_controls() {
         // The harness fails on any control without an accessible name.
         h.run_steps(3);
     }
+}
+
+#[test]
+fn episode_templates_save_and_start_new_episodes() {
+    let mut app = SoundApp::new(soundcraft_engine::Engine::default(), None, Services::default());
+    let dir = std::env::temp_dir().join(format!("podcraft-tpl-ui-{}", std::process::id()));
+    app.ui.template_dir = dir.display().to_string();
+    app.run("template.new", json!({"template": "solo", "name": "Pilot"})).unwrap();
+    app.run("track.rename", json!({"track": app.engine.session().tracks[0].id.0, "name": "Anna"})).unwrap();
+    menus::invoke_menu(&mut app, "template.list", "File > Episode Templates...");
+    let mut h = harness(app);
+    h.run_steps(3);
+    h.get_by_role_and_label(Role::TextInput, "Template name").click();
+    h.run_steps(2);
+    h.event(egui::Event::Text("Weekly".into()));
+    h.run_steps(2);
+    h.get_by_label("Save Template").click();
+    h.run_steps(3);
+    assert!(dir.join("Weekly.pctemplate").exists(), "{}", h.state().ui.status);
+    // The saved one is listed after the built-ins; start an episode from it.
+    let buttons = h.get_all_by_label("New Episode").count();
+    assert_eq!(buttons, soundcraft_engine::templates::BUILT_IN.len() + 1);
+    h.get_all_by_label("New Episode").last().unwrap().click();
+    h.run_steps(3);
+    // The pilot has unsaved changes: it asks first.
+    h.get_by_label("Don't Save").click();
+    h.run_steps(3);
+    let s = h.state().engine.session();
+    assert_eq!(s.name, "Untitled");
+    assert_eq!(s.tracks[0].name, "Anna");
+    assert!(h.state().ui.podcast_tools.is_none(), "the window closes");
+    std::fs::remove_dir_all(&dir).ok();
 }

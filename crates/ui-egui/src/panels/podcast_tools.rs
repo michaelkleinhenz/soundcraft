@@ -1,5 +1,6 @@
 //! The podcast production tools' window: Tighten Pauses and Insert Segment (Edit menu), Auto-Duck
-//! Music and Sync Remote Recordings (Track menu) and the Episode Pre-flight Check (File menu).
+//! Music and Sync Remote Recordings (Track menu), the Episode Pre-flight Check and Episode
+//! Templates (File menu).
 
 use super::SoundApp;
 use crate::theme::Tokens;
@@ -14,6 +15,7 @@ pub enum PodcastTool {
     Preflight,
     Sync,
     Segments,
+    Templates,
 }
 
 /// What a segment in the library is for.
@@ -56,6 +58,7 @@ pub(super) fn podcast_tools(app: &mut SoundApp, ctx: &egui::Context) {
         PodcastTool::Preflight => "Episode Pre-flight Check",
         PodcastTool::Sync => "Sync Remote Recordings",
         PodcastTool::Segments => "Insert Segment",
+        PodcastTool::Templates => "Episode Templates",
     };
     let mut open = true;
     egui::Window::new(title).id(id("window")).open(&mut open).default_size(vec2(420.0, 320.0)).collapsible(false).show(ctx, |ui| match tool {
@@ -64,6 +67,7 @@ pub(super) fn podcast_tools(app: &mut SoundApp, ctx: &egui::Context) {
         PodcastTool::Preflight => preflight(app, ui),
         PodcastTool::Sync => sync(app, ui),
         PodcastTool::Segments => segments(app, ui),
+        PodcastTool::Templates => templates(app, ui),
     });
     if !open {
         app.ui.podcast_tools = None;
@@ -344,4 +348,122 @@ fn segments(app: &mut SoundApp, ui: &mut egui::Ui) {
 /// [`slider`] in a grid of its own.
 fn slider_row(ui: &mut egui::Ui, label: &str, key: &str, range: std::ops::RangeInclusive<f32>, default: f32, suffix: &str) -> f32 {
     egui::Grid::new(id(&format!("{key}_grid"))).num_columns(2).show(ui, |ui| slider(ui, label, key, range, default, suffix)).inner
+}
+
+/// File › Episode Templates' folder: the setting, else "PodCraft Templates" in the home folder
+/// (none in the browser, which only has the built-ins).
+pub fn template_dir(app: &SoundApp) -> String {
+    if !app.ui.template_dir.trim().is_empty() {
+        return app.ui.template_dir.trim().to_string();
+    }
+    if cfg!(target_arch = "wasm32") {
+        return String::new();
+    }
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+    if home.is_empty() { String::new() } else { std::path::Path::new(&home).join("PodCraft Templates").to_string_lossy().into_owned() }
+}
+
+fn templates(app: &mut SoundApp, ui: &mut egui::Ui) {
+    dim(
+        ui,
+        "A template is an episode's set-up without its recordings: tracks, routing, levels, plugin chains and their settings, export settings and the show's details.",
+    );
+    let dir = template_dir(app);
+    // The list is read when the window opens and after a save.
+    if app.ui.podcast_report.as_ref().is_none_or(|r| r.get("templates").is_none()) {
+        match app.run("template.list", json!({"dir": dir})) {
+            Ok(v) => app.ui.podcast_report = Some(v),
+            Err(e) => app.ui.status = e.to_string(),
+        }
+    }
+    let mut name: String = remembered(ui, "tpl_episode", "Untitled".to_string());
+    ui.horizontal(|ui| {
+        ui.label("Episode name");
+        crate::widgets::named_text_field(ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0)), "Episode name");
+    });
+    remember(ui, "tpl_episode", name.clone());
+    let list = app.ui.podcast_report.as_ref().and_then(|r| r["templates"].as_array().cloned()).unwrap_or_default();
+    let mut start: Option<Value> = None;
+    egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
+        for t in &list {
+            ui.horizontal(|ui| {
+                if ui.button("New Episode").on_hover_text(format!("New episode from “{}”", t["name"].as_str().unwrap_or(""))).clicked() {
+                    start = Some(t["template"].clone());
+                }
+                ui.vertical(|ui| {
+                    let mut title = egui::RichText::new(t["name"].as_str().unwrap_or("")).strong();
+                    if t["built_in"] == true {
+                        title = title.italics();
+                    }
+                    ui.label(title);
+                    let tracks =
+                        t["tracks"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                    let text = [t["description"].as_str().unwrap_or(""), tracks.as_str()]
+                        .iter()
+                        .filter(|x| !x.is_empty())
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(" · ");
+                    dim(ui, &text);
+                });
+            });
+            ui.add_space(4.0);
+        }
+    });
+    if let Some(template) = start {
+        let params = json!({"template": template, "name": name});
+        match crate::dialogs::run_or_ask(app, "template.new", params) {
+            Ok(_) => {
+                app.ui.podcast_tools = None;
+                app.ui.podcast_report = None;
+            }
+            Err(e) => app.ui.status = e,
+        }
+        return;
+    }
+    ui.separator();
+    ui.label(egui::RichText::new("Save this session as a template").strong());
+    let mut tname: String = remembered(ui, "tpl_name", app.engine.session().episode.show.clone());
+    let mut desc: String = remembered(ui, "tpl_desc", String::new());
+    let mut folder = app.ui.template_dir.clone();
+    egui::Grid::new(id("tpl_grid")).num_columns(2).show(ui, |ui| {
+        ui.label("Name");
+        crate::widgets::named_text_field(ui.add(egui::TextEdit::singleline(&mut tname).desired_width(240.0)), "Template name");
+        ui.end_row();
+        ui.label("Description");
+        crate::widgets::named_text_field(ui.add(egui::TextEdit::singleline(&mut desc).desired_width(240.0)), "Template description");
+        ui.end_row();
+        ui.label("Folder");
+        crate::widgets::named_text_field(
+            ui.add(egui::TextEdit::singleline(&mut folder).hint_text(dir.as_str()).desired_width(240.0)),
+            "Templates folder",
+        );
+        ui.end_row();
+    });
+    if folder != app.ui.template_dir {
+        app.ui.template_dir = folder;
+        app.ui.podcast_report = None;
+    }
+    remember(ui, "tpl_name", tname.clone());
+    remember(ui, "tpl_desc", desc.clone());
+    let file_name: String = tname.trim().chars().map(|c| if c.is_alphanumeric() || " -_".contains(c) { c } else { '_' }).collect();
+    let ready = !file_name.trim().is_empty() && !dir.is_empty();
+    let replace: bool = remembered(ui, "tpl_replace", false);
+    if ui.add_enabled(ready, egui::Button::new(if replace { "Replace Template" } else { "Save Template" })).clicked() {
+        let path = std::path::Path::new(&dir).join(format!("{}.{}", file_name.trim(), soundcraft_engine::templates::EXTENSION));
+        match app.run("template.save", json!({"path": path.to_string_lossy(), "name": tname.trim(), "description": desc.trim(), "replace": replace}))
+        {
+            Ok(_) => {
+                app.ui.status = format!("Saved the template “{}”", tname.trim());
+                app.ui.podcast_report = None;
+                remember(ui, "tpl_replace", false);
+            }
+            // Asks once before replacing a template of the same name.
+            Err(e) if e.contains("already exists") => {
+                app.ui.status = format!("A template named “{}” exists: press Replace Template to overwrite it", tname.trim());
+                remember(ui, "tpl_replace", true);
+            }
+            Err(e) => app.ui.status = e,
+        }
+    }
 }
