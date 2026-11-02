@@ -90,3 +90,11 @@ MP3 holds mono or stereo at 48, 44.1 or 32 kHz (and lower rates): a session at 9
 surround mix is refused before any file is written. The encoder is
 [`rusty_mp3`](https://crates.io/crates/rusty_mp3), a pure-Rust Apache-2.0 encoder (LAME and its
 ports are LGPL, which this project does not take).
+
+## FLAC
+
+**File ▸ Bounce Mix… ▸ Format ▸ FLAC** writes a lossless master, 16 or 24 bit, for archiving or
+for hosts that take FLAC. It carries the same episode info as an MP3, as Vorbis comments (`TITLE`,
+`ALBUM`, `ARTIST`, `TRACKNUMBER`, `DISCNUMBER`, `DATE`, `DESCRIPTION`, `GENRE`), the chapters as
+`CHAPTER001=HH:MM:SS.mmm` / `CHAPTER001NAME` / `CHAPTER001URL`, and the cover art as a front-cover
+`PICTURE` block. It keeps the session's sample rate and up to 8 channels.

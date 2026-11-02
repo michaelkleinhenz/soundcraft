@@ -279,6 +279,23 @@ impl Bounce {
         })
     }
 
+    /// Like [`Bounce::new`], writing a FLAC whose metadata carries `opts.tag`: Vorbis comments,
+    /// `CHAPTERnnn` chapters and the cover art.
+    pub fn new_flac(
+        s: Arc<Session>,
+        path: &Path,
+        r: Range,
+        opts: &soundcraft_audio_io::FlacOptions,
+        bus: Option<BusId>,
+        normalize: bool,
+        fold_stereo: bool,
+    ) -> Result<Bounce> {
+        let opts = opts.clone();
+        Bounce::start(s, path, r, bus, normalize, fold_stereo, move |out, channels, rate, _| {
+            soundcraft_audio_io::FileEncoder::new_flac(out, &opts, channels, rate)
+        })
+    }
+
     fn start(
         s: Arc<Session>,
         path: &Path,

@@ -385,6 +385,9 @@ pub fn bounce_job(e: &Engine, p: &Value) -> Result<crate::io::Bounce> {
         let id3 = crate::podcast::id3_tag(e.session(), r)?.to_bytes().map_err(|err| bad("file.bounce_mix", err.to_string()))?;
         let mp3 = soundcraft_audio_io::mp3::Mp3Options { bitrate_kbps: bitrate, id3 };
         crate::io::Bounce::new_mp3(e.session_arc(), std::path::Path::new(&path), r, &mp3, bus, normalize, fold)?
+    } else if format == soundcraft_audio_io::FileFormat::Flac {
+        let flac = soundcraft_audio_io::FlacOptions { bit_depth, dither: opts.dither, tag: crate::podcast::id3_tag(e.session(), r)? };
+        crate::io::Bounce::new_flac(e.session_arc(), std::path::Path::new(&path), r, &flac, bus, normalize, fold)?
     } else {
         crate::io::Bounce::new(e.session_arc(), std::path::Path::new(&path), r, &opts, bus, normalize, fold)?
     };

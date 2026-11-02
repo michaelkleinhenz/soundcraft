@@ -79,7 +79,7 @@ pub(super) fn episode_info(app: &mut SoundApp, ctx: &egui::Context) {
             "Description",
         );
         ui.label(
-            egui::RichText::new("MP3 bounces carry these details, the cover art and one chapter per marker.")
+            egui::RichText::new("MP3 and FLAC bounces carry these details, the cover art and one chapter per marker.")
                 .small()
                 .color(Tokens::current().text_dim),
         );

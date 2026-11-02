@@ -18,6 +18,7 @@ mod aiff;
 mod buffer;
 mod caf;
 mod flac;
+mod flac_tags;
 pub mod id3;
 pub mod mp3;
 mod mp4;
@@ -406,6 +407,16 @@ pub(crate) fn failed_write_error() -> AudioError {
     AudioError::Encode("the stream encoder already failed on an earlier write; its output is incomplete".into())
 }
 
+/// How to write a tagged FLAC (see [`FileEncoder::new_flac`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlacOptions {
+    pub bit_depth: BitDepth,
+    /// Add TPDF dither when quantizing.
+    pub dither: bool,
+    /// The episode details, chapters and cover art the stream's metadata carries.
+    pub tag: id3::Id3Tag,
+}
+
 /// Writes WAV/BWF (RF64 above 4 GiB), AIFF / AIFF-C `fl32` or FLAC block by block, producing
 /// the same bytes [`encode_with_channel_mask`] would for the whole buffer.
 pub struct FileEncoder<W: Write + Seek>(Writer<W>);
@@ -432,7 +443,7 @@ impl<W: Write + Seek> FileEncoder<W> {
                 wav::HeaderExtras { bwf: opts.bwf.as_ref(), mask, force_rf64: false },
             )?),
             FileFormat::Aiff => Writer::Aiff(aiff::Writer::new(out, channels, sample_rate, depth, dither)?),
-            FileFormat::Flac => Writer::Flac(flac::Writer::new(out, channels, sample_rate, depth, dither)?),
+            FileFormat::Flac => Writer::Flac(flac::Writer::new(out, channels, sample_rate, depth, dither, &[])?),
             FileFormat::Mp3 => Writer::Mp3(Box::new(mp3::Writer::new(out, &mp3::Mp3Options::default(), channels, sample_rate)?)),
             other => return Err(AudioError::Unsupported(format!("encoding {other:?} is not supported"))),
         }))
@@ -442,6 +453,13 @@ impl<W: Write + Seek> FileEncoder<W> {
     /// written before the audio.
     pub fn new_mp3(out: W, opts: &mp3::Mp3Options, channels: usize, sample_rate: u32) -> Result<Self> {
         Ok(FileEncoder(Writer::Mp3(Box::new(mp3::Writer::new(out, opts, channels, sample_rate)?))))
+    }
+
+    /// Starts a FLAC at the current position of `out` whose metadata carries `opts.tag` (Vorbis
+    /// comments with `CHAPTERnnn` chapters, and the cover art as a PICTURE block).
+    pub fn new_flac(out: W, opts: &FlacOptions, channels: usize, sample_rate: u32) -> Result<Self> {
+        let meta = flac_tags::blocks(&opts.tag)?;
+        Ok(FileEncoder(Writer::Flac(flac::Writer::new(out, channels, sample_rate, opts.bit_depth, opts.dither, &meta)?)))
     }
 
     /// Fails, without writing anything, when `frames` more frames would not fit the format (an

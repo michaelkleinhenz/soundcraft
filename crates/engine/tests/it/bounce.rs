@@ -293,3 +293,22 @@ fn mp3_bounces_refuse_what_mp3_cannot_hold() {
     assert!(!dir.join("y.mp3").exists() && !dir.join("y.mp3.part").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn flac_bounces_carry_the_episode_comments_chapters_and_cover() {
+    let (mut e, frames) = tone_session(0.05, 2.0);
+    let dir = scratch("bounce-flac-tags");
+    let art = dir.join("cover.png");
+    std::fs::write(&art, [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n', 0, 0]).unwrap();
+    e.execute("episode.set", &serde_json::json!({"title": "Pilot", "show": "The Show", "season": 2, "artwork": art})).unwrap();
+    e.session_mut().add_marker("Main", soundcraft_model::MarkerKind::Marker, 24_000, 24_000);
+    let path = dir.join("Pilot.flac");
+    e.execute("file.bounce_mix", &serde_json::json!({"path": path, "bit_depth": 16, "start": 0, "end": frames})).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    for needle in ["TITLE=Pilot", "ALBUM=The Show", "DISCNUMBER=2", "GENRE=Podcast", "CHAPTER001=00:00:00.500", "CHAPTER001NAME=Main", "image/png"] {
+        assert!(bytes.windows(needle.len()).any(|w| w == needle.as_bytes()), "{needle}");
+    }
+    let (info, audio) = soundcraft_audio_io::decode(&bytes, Some("flac")).unwrap();
+    assert_eq!((info.format, audio.frames() as i64), (FileFormat::Flac, frames));
+    let _ = std::fs::remove_dir_all(&dir);
+}

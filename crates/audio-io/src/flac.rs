@@ -287,9 +287,9 @@ fn check(channels: usize, sample_rate: u32, depth: BitDepth) -> Result<u32> {
     }
 }
 
-fn stream_info(channels: usize, sample_rate: u32, bps: u32, total: u64) -> Vec<u8> {
+fn stream_info(channels: usize, sample_rate: u32, bps: u32, total: u64, last: bool) -> Vec<u8> {
     let mut si = BitWriter::new();
-    si.write(1, 1); // last metadata block
+    si.write(u64::from(last), 1); // last metadata block
     si.write(0, 7); // STREAMINFO
     si.write(34, 24);
     si.write(BLOCK_SIZE as u64, 16);
@@ -314,6 +314,8 @@ pub(crate) struct Writer<W> {
     channels: usize,
     sample_rate: u32,
     bps: u32,
+    /// Whether STREAMINFO is the only metadata block (no tags follow it).
+    info_only: bool,
     quantizers: Vec<Quantizer>,
     pending: Vec<Vec<i64>>,
     frames: u64,
@@ -325,12 +327,25 @@ pub(crate) struct Writer<W> {
 }
 
 impl<W: Write + Seek> Writer<W> {
-    pub(crate) fn new(mut out: W, channels: usize, sample_rate: u32, depth: BitDepth, dither: bool) -> Result<Self> {
+    /// Starts a stream whose STREAMINFO is followed by the metadata blocks `meta` (type, body),
+    /// such as [`crate::flac_tags::blocks`].
+    pub(crate) fn new(mut out: W, channels: usize, sample_rate: u32, depth: BitDepth, dither: bool, meta: &[(u8, Vec<u8>)]) -> Result<Self> {
         let bps = check(channels, sample_rate, depth)?;
         let start = out.stream_position()?;
         out.write_all(b"fLaC")?;
-        out.write_all(&stream_info(channels, sample_rate, bps, 0))?;
+        let info_only = meta.is_empty();
+        out.write_all(&stream_info(channels, sample_rate, bps, 0, info_only))?;
+        for (i, (kind, body)) in meta.iter().enumerate() {
+            let len = u32::try_from(body.len())
+                .ok()
+                .filter(|&n| n < 1 << 24)
+                .ok_or_else(|| AudioError::TooLarge("a FLAC metadata block is over 16 MiB".into()))?;
+            let last = u32::from(i + 1 == meta.len()) << 31;
+            out.write_all(&(last | u32::from(*kind & 0x7f) << 24 | len).to_be_bytes())?;
+            out.write_all(body)?;
+        }
         Ok(Writer {
+            info_only,
             out,
             start,
             channels,
@@ -423,7 +438,7 @@ impl<W: Write + Seek> Writer<W> {
             return Err(crate::failed_write_error());
         }
         self.write_frame()?;
-        let info = stream_info(self.channels, self.sample_rate, self.bps, self.frames);
+        let info = stream_info(self.channels, self.sample_rate, self.bps, self.frames, self.info_only);
         self.out.seek(SeekFrom::Start(self.start.saturating_add(4)))?;
         self.out.write_all(&info)?;
         self.out.seek(SeekFrom::End(0))?;
@@ -439,7 +454,7 @@ pub(crate) fn encode(buf: &AudioBuffer, depth: BitDepth, dither: bool) -> Result
     let mut out = Vec::new();
     out.try_reserve(frames.saturating_mul(buf.channels.len()).saturating_mul(bps as usize / 8) / 2)
         .map_err(|_| AudioError::TooLarge("cannot allocate FLAC output".into()))?;
-    let mut w = Writer::new(Cursor::new(out), buf.channels.len(), buf.sample_rate, depth, dither)?;
+    let mut w = Writer::new(Cursor::new(out), buf.channels.len(), buf.sample_rate, depth, dither, &[])?;
     w.write(&buf.channels, frames)?;
     Ok(w.finish()?.into_inner())
 }
