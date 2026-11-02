@@ -9,7 +9,7 @@ pub const PROTOCOL_VERSION: &str = "2025-06-18";
 const SUPPORTED: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 const MAX_BATCH_CALLS: usize = 1000;
 
-const INSTRUCTIONS: &str = "SoundCraft is a digital audio workstation (Pro Tools-class). Everything a user can do is a \
+const INSTRUCTIONS: &str = "PodCraft is a podcast creation tool built on a digital audio workstation (Pro Tools-class). Everything a user can do is a \
 command: call `list_commands` to discover ids and their params, then `execute` (or `batch`). Positions are samples \
 (integers), `{\"seconds\": x}`, or time strings like \"bars_beats:5|1|000\" / \"0:12.500\". Tracks are referenced by id \
 or name. Verify your work with `inspect_session` (tracks, clips, mixer, automation, markers, selection). Programmatic \
@@ -27,7 +27,7 @@ pub fn tool_definitions() -> Vec<Value> {
     vec![
         tool(
             "list_commands",
-            "List SoundCraft commands (id, label, menu path, shortcut, params doc, enabled).",
+            "List PodCraft commands (id, label, menu path, shortcut, params doc, enabled).",
             json!({"filter": {"type": "string", "description": "substring of id or label"}}),
             &[],
         ),
@@ -51,8 +51,13 @@ pub fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "new_session",
-            "Start a new session (optionally the built-in demo).",
-            json!({"name": {"type": "string"}, "sample_rate": {"type": "integer"}, "template": {"type": "string", "enum": ["blank", "demo"]}}),
+            "Start a new session: blank, the built-in demo song, or a podcast episode (one mono track per speaker with a voice chain, Music, SFX, a Voices bus and a limited master).",
+            json!({
+                "name": {"type": "string"},
+                "sample_rate": {"type": "integer"},
+                "template": {"type": "string", "enum": ["blank", "demo", "podcast"]},
+                "speakers": {"type": "array", "items": {"type": "string"}, "description": "podcast template: speaker track names (default Host, Guest; at most 8)"}
+            }),
             &[],
         ),
         tool("open_session", "Open a .scraft session file.", json!({"path": {"type": "string"}}), &["path"]),

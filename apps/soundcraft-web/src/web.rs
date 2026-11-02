@@ -41,7 +41,8 @@ pub fn start() {
                     }
                     let engine = if query().contains("empty") { Engine::default() } else { soundcraft_engine::demo::demo_engine() };
                     let player = soundcraft_playback::Player::new(Arc::new(engine.session().clone()));
-                    let app = SoundApp::new(engine, Some(player), Services::default());
+                    let mut app = SoundApp::new(engine, Some(player), Services::default());
+                    soundcraft_ui_egui::podcast::set(&mut app, true);
                     Ok(Box::new(WebShell { app, inbox: Rc::default(), samples: Rc::default() }))
                 }),
             )
@@ -49,7 +50,7 @@ pub fn start() {
         if let Some(el) = document.get_element_by_id(LOADING_ID) {
             match result {
                 Ok(()) => el.remove(),
-                Err(e) => el.set_inner_html(&format!("<p>SoundCraft failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
+                Err(e) => el.set_inner_html(&format!("<p>PodCraft failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
             }
         }
     });
@@ -95,7 +96,7 @@ impl Purpose {
 
     fn filter(self) -> (&'static str, Vec<&'static str>) {
         match self {
-            Self::Session => ("SoundCraft Session", SESSION_EXTS.to_vec()),
+            Self::Session => ("PodCraft Session", SESSION_EXTS.to_vec()),
             Self::Audio => ("Audio", FileFormat::readable_extensions()),
             Self::Midi => ("MIDI", MIDI_EXTS.to_vec()),
         }

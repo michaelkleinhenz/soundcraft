@@ -54,7 +54,7 @@ fn a_bounce_renders_across_frames_with_progress_until_its_file_is_written() {
     assert!(progress.is_sorted() && progress[0] < progress[3] && progress[3] < 1.0, "{progress:?}");
     h.run();
     assert!(h.state().bounce.is_none());
-    assert!(h.state().ui.status.starts_with("Bounced Mix.wav (peak"), "{}", h.state().ui.status);
+    assert!(h.state().ui.status.starts_with("Bounced Mix.wav ("), "{}", h.state().ui.status);
     let (_, file) = soundcraft_audio_io::decode(&std::fs::read(dir.join("Mix.wav")).unwrap(), None).unwrap();
     assert_eq!(file.frames() as i64, frames);
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);

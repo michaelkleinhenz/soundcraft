@@ -35,6 +35,7 @@ mod new_midi_clip;
 mod new_tracks;
 mod open_on_insert;
 mod plugin_window;
+mod podcast_mode;
 mod pro_tools_keys;
 mod record_hint;
 mod rename_dialog;

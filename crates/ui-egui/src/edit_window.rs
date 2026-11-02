@@ -118,8 +118,9 @@ fn status_bar(app: &mut SoundApp, ui: &mut Ui) {
 
 pub(crate) fn main_area(app: &mut SoundApp, ui: &mut Ui) {
     let session = app.engine.session();
-    let mut ruler_height_total = session.edit.rulers.iter().map(|ruler| ruler_height(ruler)).sum::<f32>();
-    if session.edit.flag("view.ruler.tempo_editor") && session.edit.rulers.iter().any(|ruler| ruler == "tempo") {
+    let rulers = crate::podcast::visible_rulers(app.ui.podcast_mode, &session.edit.rulers);
+    let mut ruler_height_total = rulers.iter().map(|ruler| ruler_height(ruler)).sum::<f32>();
+    if session.edit.flag("view.ruler.tempo_editor") && rulers.iter().any(|ruler| ruler == "tempo") {
         ruler_height_total += ruler_height("tempo_editor");
     }
     let minimum = vec2(header_width(&edit_columns(session)) + 64.0, ruler_height_total + 100.0);
@@ -130,8 +131,7 @@ pub(crate) fn main_area(app: &mut SoundApp, ui: &mut Ui) {
 fn main_area_content(app: &mut SoundApp, ui: &mut Ui) {
     let t = Tokens::current();
     let full = ui.max_rect();
-    let rulers: Vec<String> = app.engine.session().edit.rulers.clone();
-    let mut rulers = rulers;
+    let mut rulers = crate::podcast::visible_rulers(app.ui.podcast_mode, &app.engine.session().edit.rulers);
     if app.engine.session().edit.flag("view.ruler.tempo_editor")
         && let Some(i) = rulers.iter().position(|r| r == "tempo")
     {

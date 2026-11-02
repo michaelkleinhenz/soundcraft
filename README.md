@@ -11,16 +11,19 @@
   <img src="assets/app-icon/hicolor/256x256/apps/ai.storyteller.soundcraft.png" width="128" height="128" alt="SoundCraft icon: a singing bird on a blue tile">
 </p>
 
-<h1 align="center">SoundCraft</h1>
+<h1 align="center">PodCraft</h1>
 
 <p align="center">
-  <b>Recording, editing and mixing audio; an open-source, modern digital audio workstation (DAW), built in pure Rust.</b>
+  <b>Recording, editing and publishing podcasts; an open-source podcast creation tool, built in pure Rust.</b>
 </p>
 
 <p align="center">
-  A complete digital audio workstation that runs natively on macOS, Windows, Linux and FreeBSD, and
-  in the browser. Multitrack editing, a full mixer with plugins, sends and automation, MIDI, recording
-  and bouncing, and every action scriptable from the command line or by an AI agent.
+  PodCraft records, edits, mixes and exports podcast episodes on macOS, Windows, Linux and
+  FreeBSD, and in the browser. It is built on <a href="https://getartcraft.com/apps/soundcraft">SoundCraft</a>,
+  the ArtCraft digital audio workstation: Podcast mode hides the music-production features (MIDI,
+  tempo, video, surround) and adds podcast tools such as an episode template and loudness-target
+  export. Switch Podcast mode off in the PodCraft menu to get the full workstation back; see
+  <a href="docs/podcast.md">docs/podcast.md</a>.
 </p>
 
 <p align="center">

@@ -401,3 +401,18 @@ fn save_copy_leaves_the_open_session_alone() {
     assert!(from_copy.session().track_by_name("Extra").is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn new_session_builds_the_podcast_template_with_named_speakers() {
+    let mut e = Engine::default();
+    e.execute("session.new", &json!({"name": "Ep 12", "template": "podcast", "speakers": ["Anna", "Ben", "Cleo"]})).unwrap();
+    let s = e.session();
+    assert_eq!(s.name, "Ep 12");
+    let mono: Vec<&str> = s.tracks.iter().filter(|t| t.format == ChannelFormat::Mono).map(|t| t.name.as_str()).collect();
+    assert_eq!(mono, ["Anna", "Ben", "Cleo"]);
+    assert!(s.tracks.iter().any(|t| t.name == "Voices" && t.kind == TrackKind::Aux));
+    e.execute("session.new", &json!({"template": "podcast"})).unwrap();
+    assert_eq!(e.session().tracks.iter().filter(|t| t.format == ChannelFormat::Mono).count(), 2, "Host and Guest");
+    let err = e.execute("session.new", &json!({"template": "radio"})).unwrap_err().to_string();
+    assert!(err.contains("unknown template `radio`"), "{err}");
+}

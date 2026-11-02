@@ -116,9 +116,9 @@ pub enum RemoteError {
     /// The host name didn't resolve.
     #[error("{addr}: {source}")]
     Resolve { addr: String, source: io::Error },
-    #[error("cannot reach SoundCraft at {addr}: no addresses found")]
+    #[error("cannot reach PodCraft at {addr}: no addresses found")]
     NoAddress { addr: String },
-    #[error("cannot reach SoundCraft at {addr}: {source}")]
+    #[error("cannot reach PodCraft at {addr}: {source}")]
     Unreachable { addr: String, source: io::Error },
     /// Reading or writing the connection failed.
     #[error(transparent)]
@@ -244,7 +244,7 @@ impl Backend for Remote {
         true
     }
     fn describe(&self) -> String {
-        format!("SoundCraft app at {}", self.addr)
+        format!("PodCraft app at {}", self.addr)
     }
 }
 
@@ -268,7 +268,7 @@ mod tests {
         let mut r = Remote::new(&ControlTarget { host: Some("127.0.0.1".into()), port: 1 });
         let e = r.request("session.inspect", json!({})).unwrap_err();
         assert!(matches!(e, RemoteError::Unreachable { .. }), "{e:?}");
-        assert!(e.to_string().starts_with("cannot reach SoundCraft at 127.0.0.1:1: "), "{e}");
+        assert!(e.to_string().starts_with("cannot reach PodCraft at 127.0.0.1:1: "), "{e}");
     }
 
     #[test]
