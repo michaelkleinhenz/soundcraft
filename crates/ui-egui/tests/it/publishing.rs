@@ -114,3 +114,18 @@ fn in_podcast_mode_m_adds_a_chapter_marker_and_e_an_edit_marker() {
         assert!(has(&tree, path), "{path} missing");
     }
 }
+
+#[test]
+fn the_podcast_tools_open_from_their_menus() {
+    let tree = podcast::visible_tree(menus::tree(), true);
+    for path in ["Edit > Tighten Pauses...", "Track > Auto-Duck Music...", "File > Episode Pre-flight Check...", "Track > Voice Preset > Broadcast"] {
+        assert!(has(&tree, path), "{path} missing");
+    }
+    let mut app = SoundApp::new(soundcraft_engine::demo::demo_engine(), None, Services::default());
+    menus::invoke_menu(&mut app, "session.preflight", "File > Episode Pre-flight Check...");
+    let mut h = harness(app);
+    h.run_steps(3);
+    h.get_by_label("Run Check").click();
+    h.run_steps(3);
+    assert!(h.state().ui.podcast_report.as_ref().is_some_and(|r| r["issues"].is_array()));
+}

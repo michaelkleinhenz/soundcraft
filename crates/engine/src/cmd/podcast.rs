@@ -1,5 +1,5 @@
 //! Podcast publishing: the episode details kept with the session, and chapters from markers.
-use super::{CommandSpec, always, bad, range_param, str_param};
+use super::{CommandSpec, always, bad, has_selection, range_param, str_param};
 
 use crate::{Engine, Result, cmd};
 use serde_json::{Value, json};
@@ -39,6 +39,39 @@ pub fn specs() -> Vec<CommandSpec> {
             "{name?, at?, comments?} — a marker for a spot that still needs an edit; not a chapter",
             always,
             |e, p| { add_point_marker(e, p, "edit", "Edit") }
+        ),
+        cmd!(
+            "track.voice_preset",
+            "Voice Preset",
+            ["Track", "Voice Preset"],
+            None,
+            "{preset: standard|broadcast|warm|phone|room, tracks?} — replaces inserts A–D with the speech chain",
+            has_selection,
+            |e, p| {
+                let id = "track.voice_preset";
+                let name = str_param(p, "preset").ok_or_else(|| bad(id, "`preset` required"))?;
+                let chain = crate::podcast::voice_preset(name).ok_or_else(|| {
+                    let ids: Vec<&str> = crate::podcast::VOICE_PRESETS.iter().map(|v| v.0).collect();
+                    bad(id, format!("unknown preset `{name}` (one of {})", ids.join(", ")))
+                })?;
+                let tracks = super::tracks_required(e, id, p)?;
+                let s = e.session_mut();
+                let mut done = 0;
+                for t in &tracks {
+                    if let Some(tr) =
+                        s.track_mut(*t).filter(|tr| matches!(tr.kind, soundcraft_model::TrackKind::Audio | soundcraft_model::TrackKind::Aux))
+                    {
+                        for (i, slot) in tr.mixer.inserts.iter_mut().take(chain.len()).enumerate() {
+                            *slot = chain.get(i).cloned();
+                        }
+                        done += 1;
+                    }
+                }
+                if done == 0 {
+                    return Err(bad(id, "voice presets go on audio or aux tracks"));
+                }
+                Ok(json!({"tracks": done}))
+            }
         ),
         cmd!(noundo "markers.next_edit", "Go to Next Edit Marker", ["Edit"], None, "{}", always, |e, _| step_edit_marker(e, true)),
         cmd!(noundo "markers.previous_edit", "Go to Previous Edit Marker", ["Edit"], None, "{}", always, |e, _| step_edit_marker(e, false)),
@@ -148,6 +181,19 @@ fn set_episode(e: &mut Engine, p: &Value) -> Result<Value> {
 mod tests {
     use crate::Engine;
     use serde_json::json;
+
+    #[test]
+    fn voice_presets_replace_the_first_inserts_and_undo() {
+        let mut e = Engine::default();
+        e.execute("track.new", &json!({"kind": "audio", "format": "mono"})).unwrap();
+        e.execute("track.voice_preset", &json!({"preset": "Phone/Remote"})).unwrap();
+        let ins: Vec<String> = e.session().tracks[0].mixer.inserts.iter().flatten().map(|i| i.plugin.clone()).collect();
+        assert_eq!(ins, ["eq_7band", "expander_gate", "compressor", "de_esser"]);
+        assert_eq!(e.session().tracks[0].mixer.inserts[0].as_ref().unwrap().params.get("lpf_on"), Some(&1.0));
+        assert!(e.execute("track.voice_preset", &json!({"preset": "opera"})).unwrap_err().to_string().contains("broadcast"));
+        e.execute("edit.undo", &json!({})).unwrap();
+        assert!(e.session().tracks[0].mixer.inserts.iter().all(Option::is_none));
+    }
 
     #[test]
     fn chapter_and_edit_markers_are_two_kinds_and_only_chapters_export() {

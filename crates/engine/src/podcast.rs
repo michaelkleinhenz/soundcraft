@@ -51,6 +51,110 @@ pub fn voice_chain() -> Vec<Insert> {
     VOICE_CHAIN.iter().map(|(id, params)| insert(id, params)).collect()
 }
 
+type Chain = &'static [(&'static str, &'static [(&'static str, f32)])];
+
+/// One-click speech chains (B2): id, menu name, and the inserts in order. `standard` is the
+/// template's chain.
+pub const VOICE_PRESETS: &[(&str, &str, Chain)] = &[
+    ("standard", "Standard", VOICE_CHAIN),
+    (
+        "broadcast",
+        "Broadcast",
+        &[
+            (
+                "eq_7band",
+                &[
+                    ("hpf_on", 1.0),
+                    ("hpf_freq", 80.0),
+                    ("low_shelf_freq", 120.0),
+                    ("low_shelf_gain", 2.0),
+                    ("low_mid_freq", 300.0),
+                    ("low_mid_gain", -2.5),
+                    ("high_mid_freq", 4000.0),
+                    ("high_mid_gain", 2.5),
+                    ("high_shelf_freq", 10000.0),
+                    ("high_shelf_gain", 2.0),
+                ],
+            ),
+            ("expander_gate", &[("threshold", -50.0), ("ratio", 2.0), ("range", 12.0), ("attack", 2.0), ("hold", 150.0), ("release", 250.0)]),
+            ("compressor", &[("threshold", -22.0), ("ratio", 4.0), ("attack", 8.0), ("release", 100.0), ("knee", 6.0), ("makeup", 6.0)]),
+            ("de_esser", &[("freq", 6500.0), ("range", 6.0), ("threshold", -30.0)]),
+        ],
+    ),
+    (
+        "warm",
+        "Warm",
+        &[
+            (
+                "eq_7band",
+                &[
+                    ("hpf_on", 1.0),
+                    ("hpf_freq", 70.0),
+                    ("low_shelf_freq", 150.0),
+                    ("low_shelf_gain", 3.0),
+                    ("high_shelf_freq", 9000.0),
+                    ("high_shelf_gain", -1.5),
+                ],
+            ),
+            ("expander_gate", &[("threshold", -55.0), ("ratio", 1.5), ("range", 8.0), ("attack", 2.0), ("hold", 200.0), ("release", 300.0)]),
+            ("compressor", &[("threshold", -26.0), ("ratio", 2.5), ("attack", 15.0), ("release", 150.0), ("knee", 8.0), ("makeup", 4.0)]),
+            ("de_esser", &[("freq", 6000.0), ("range", 4.0), ("threshold", -30.0)]),
+        ],
+    ),
+    (
+        "phone",
+        "Phone/Remote",
+        // A thin remote or phone voice: band-limited, mids forward, levelled hard.
+        &[
+            (
+                "eq_7band",
+                &[
+                    ("hpf_on", 1.0),
+                    ("hpf_freq", 150.0),
+                    ("lpf_on", 1.0),
+                    ("lpf_freq", 7000.0),
+                    ("low_mid_freq", 300.0),
+                    ("low_mid_gain", -3.0),
+                    ("mid_freq", 1500.0),
+                    ("mid_gain", 2.0),
+                ],
+            ),
+            ("expander_gate", &[("threshold", -45.0), ("ratio", 2.0), ("range", 12.0), ("attack", 2.0), ("hold", 120.0), ("release", 200.0)]),
+            ("compressor", &[("threshold", -20.0), ("ratio", 4.0), ("attack", 5.0), ("release", 80.0), ("knee", 6.0), ("makeup", 6.0)]),
+            ("de_esser", &[("freq", 5500.0), ("range", 3.0), ("threshold", -30.0)]),
+        ],
+    ),
+    (
+        "room",
+        "Room-heavy",
+        // A reflective room: boxiness cut, more downward expansion between phrases.
+        &[
+            (
+                "eq_7band",
+                &[
+                    ("hpf_on", 1.0),
+                    ("hpf_freq", 100.0),
+                    ("low_mid_freq", 400.0),
+                    ("low_mid_gain", -4.0),
+                    ("high_mid_freq", 3500.0),
+                    ("high_mid_gain", 2.0),
+                ],
+            ),
+            ("expander_gate", &[("threshold", -45.0), ("ratio", 3.0), ("range", 18.0), ("attack", 1.0), ("hold", 100.0), ("release", 200.0)]),
+            ("compressor", &[("threshold", -24.0), ("ratio", 3.0), ("attack", 10.0), ("release", 120.0), ("knee", 6.0), ("makeup", 4.0)]),
+            ("de_esser", &[("freq", 6500.0), ("range", 6.0), ("threshold", -30.0)]),
+        ],
+    ),
+];
+
+/// The chain of the voice preset `id` (or menu name), if there is one.
+pub fn voice_preset(id: &str) -> Option<Vec<Insert>> {
+    VOICE_PRESETS
+        .iter()
+        .find(|(p, name, _)| p.eq_ignore_ascii_case(id) || name.eq_ignore_ascii_case(id))
+        .map(|(_, _, chain)| chain.iter().map(|(id, params)| insert(id, params)).collect())
+}
+
 /// Speaker names from `names`: trimmed, empty ones dropped, at most [`MAX_SPEAKERS`]; the
 /// defaults when nothing is left.
 pub fn speaker_names(names: &[String]) -> Vec<String> {

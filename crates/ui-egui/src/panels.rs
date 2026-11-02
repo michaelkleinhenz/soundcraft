@@ -9,6 +9,8 @@ use soundcraft_model::{ClipId, SourceId};
 mod about;
 mod clips;
 mod episode;
+mod podcast_tools;
+pub use podcast_tools::PodcastTool;
 mod history;
 mod memory;
 mod plugins;
@@ -94,4 +96,5 @@ pub fn floating(app: &mut SoundApp, ctx: &egui::Context) {
     about(app, ctx);
     session_info(app, ctx);
     episode::episode_info(app, ctx);
+    podcast_tools::podcast_tools(app, ctx);
 }

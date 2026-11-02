@@ -77,6 +77,9 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("ui.theme", "Appearance", "", None),
     ("ui.podcast_mode", "Podcast Mode", "", None),
     ("window.episode_info", "Episode Info", "File > Episode Info...", None),
+    ("window.tighten_pauses", "Tighten Pauses", "", None),
+    ("window.auto_duck", "Auto-Duck Music", "", None),
+    ("window.preflight", "Episode Pre-flight Check", "", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -225,6 +228,9 @@ pub fn tree() -> Vec<MenuNode> {
     // PodCraft's publishing items (not in the incumbent catalog): episode details next to Get Info,
     // and chapters among the exports.
     insert_path(&mut roots, "File > Export > Chapters...");
+    for (_, name, _) in soundcraft_engine::podcast::VOICE_PRESETS {
+        insert_path(&mut roots, &format!("Track > Voice Preset > {name}"));
+    }
     for path in ["Add Chapter Marker", "Add Edit Marker", "Go to Next Edit Marker", "Go to Previous Edit Marker"] {
         insert_path(&mut roots, &format!("Edit > {path}"));
     }
@@ -395,6 +401,9 @@ fn checked_state(app: &SoundApp, path: &str, id: Option<&str>) -> bool {
         Some("window.clip_list_view") | Some("window.clip_list") => app.ui.show_clip_list,
         Some("window.narrow_mix") => app.ui.narrow_mix,
         Some("window.episode_info") => app.ui.show_episode_info,
+        Some("window.tighten_pauses") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Pauses),
+        Some("window.auto_duck") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Duck),
+        Some("window.preflight") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Preflight),
         Some("window.renderer") => app.extra.show_renderer,
         Some("window.ui_customization") => app.extra.show_ui_customization,
         Some("window.config_auto_update") => app.extra.auto_update_config,
@@ -453,6 +462,7 @@ fn params_for(path: &str, id: &str) -> Value {
         }
         "clip.rating" => json!({"rating": leaf.parse::<u8>().unwrap_or(0)}),
         "track.change_width" => json!({"format": leaf}),
+        "track.voice_preset" => json!({"preset": leaf}),
         "view.mix_section" => json!({"section": mix_section_id(leaf)}),
         "audiosuite.process" => json!({"process": AUDIOSUITE.iter().find(|(p, _)| *p == path).map_or("", |(_, x)| *x)}),
         _ => json!({}),
@@ -461,6 +471,9 @@ fn params_for(path: &str, id: &str) -> Value {
 
 /// Menu items that open a SoundCraft window when clicked (programmatic calls still run the command).
 const MENU_WINDOWS: &[(&str, &str)] = &[
+    ("Edit > Tighten Pauses...", "window.tighten_pauses"),
+    ("Track > Auto-Duck Music...", "window.auto_duck"),
+    ("File > Episode Pre-flight Check...", "window.preflight"),
     ("Setup > Appearance", "window.ui_customization"),
     ("Setup > Hardware...", "window.playback_engine"),
     ("Setup > Playback Engine...", "window.playback_engine"),
@@ -591,6 +604,17 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
             toggle(&mut app.ui.show_audio_health)
         }
         "window.about" => toggle(&mut app.ui.show_about),
+        "window.tighten_pauses" | "window.auto_duck" | "window.preflight" => {
+            let tool = match id {
+                "window.tighten_pauses" => crate::panels::PodcastTool::Pauses,
+                "window.auto_duck" => crate::panels::PodcastTool::Duck,
+                _ => crate::panels::PodcastTool::Preflight,
+            };
+            let on = p.get("value").and_then(Value::as_bool).unwrap_or(app.ui.podcast_tools != Some(tool));
+            app.ui.podcast_report = None;
+            app.ui.podcast_tools = on.then_some(tool);
+            json!({"value": on})
+        }
         "window.episode_info" => {
             // Opening starts from what the session holds now.
             app.ui.episode_draft = None;

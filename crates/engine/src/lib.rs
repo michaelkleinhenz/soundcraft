@@ -17,6 +17,7 @@ pub mod file_access;
 pub mod inspect;
 pub mod io;
 pub mod podcast;
+pub mod preflight;
 pub mod score;
 
 use serde_json::{Value, json};

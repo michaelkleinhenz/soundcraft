@@ -92,6 +92,12 @@ pub struct UiState {
     pub show_episode_info: bool,
     #[serde(skip)]
     pub episode_draft: Option<soundcraft_model::EpisodeInfo>,
+    /// The Podcast Tools window (Tighten Pauses, Auto-Duck, Pre-flight), its tab, and the last
+    /// pre-flight report or pause preview.
+    #[serde(skip)]
+    pub podcast_tools: Option<crate::panels::PodcastTool>,
+    #[serde(skip)]
+    pub podcast_report: Option<serde_json::Value>,
     pub show_midi_editor: bool,
     pub show_universe: bool,
     pub narrow_mix: bool,
@@ -178,6 +184,8 @@ impl Default for UiState {
             show_about: false,
             show_episode_info: false,
             episode_draft: None,
+            podcast_tools: None,
+            podcast_report: None,
             show_midi_editor: false,
             show_universe: false,
             narrow_mix: false,

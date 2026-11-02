@@ -513,7 +513,7 @@ const MAX_BOUNCE_SECS: f64 = 4.0 * 3600.0;
 /// The format, channel count and fold-down source of a bounce of the main mix or `bus`: every
 /// channel (a mono or stereo main mix as stereo), or an ITU stereo fold-down of a surround source
 /// when `fold_stereo`.
-fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (ChannelFormat, usize, Option<ChannelFormat>) {
+pub(crate) fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (ChannelFormat, usize, Option<ChannelFormat>) {
     let nch = soundcraft_mix::source_channels(s, bus);
     let fmt = match bus {
         Some(id) => s.bus(id).map_or(ChannelFormat::Stereo, |b| b.format),
@@ -524,7 +524,7 @@ fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (Channel
 }
 
 /// The first `n` frames of `chunk`, folded down from `fold` when set and scaled by `gain`.
-fn fill(block: &mut Vec<Vec<f32>>, chunk: &[Vec<f32>], n: usize, fold: Option<ChannelFormat>, gain: f32) {
+pub(crate) fn fill(block: &mut Vec<Vec<f32>>, chunk: &[Vec<f32>], n: usize, fold: Option<ChannelFormat>, gain: f32) {
     let folded = fold.map(|from| soundcraft_mix::fold_down_stereo(from, chunk));
     let src = folded.as_deref().unwrap_or(chunk);
     block.resize_with(src.len(), Vec::new);

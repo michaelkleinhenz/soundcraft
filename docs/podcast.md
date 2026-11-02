@@ -126,3 +126,40 @@ for hosts that take FLAC. It carries the same episode info as an MP3, as Vorbis 
 `ALBUM`, `ARTIST`, `TRACKNUMBER`, `DISCNUMBER`, `DATE`, `DESCRIPTION`, `GENRE`), the chapters as
 `CHAPTER001=HH:MM:SS.mmm` / `CHAPTER001NAME` / `CHAPTER001URL`, and the cover art as a front-cover
 `PICTURE` block. It keeps the session's sample rate and up to 8 channels.
+
+## Voice presets
+
+**Track ▸ Voice Preset ▸ Standard / Broadcast / Warm / Phone/Remote / Room-heavy**, or
+`track.voice_preset {preset, tracks?}`, replaces inserts A–D of the selected audio or aux tracks
+with a speech chain (EQ, expander, compressor, de-esser) tuned for that voice. Standard is the New
+Episode template's chain; Phone/Remote band-limits and levels a thin call; Room-heavy cuts
+boxiness and gates the room harder between phrases. One undo step.
+
+## Tighten pauses
+
+**Edit ▸ Tighten Pauses…**, or `edit.tighten_pauses {max_pause_ms?: 1500, keep_ms?: 700,
+threshold_db?: -45, tracks?, start?, end?, dry_run?}`. Finds every pause where nobody on the
+speaker tracks talks (Strip Silence's detector, over all of them together) longer than
+`max_pause_ms`, and shortens it to `keep_ms` with a ripple on all of those tracks at once, so the
+conversation stays in sync; markers after a cut move with it. Speaker tracks default to the mono
+audio tracks (the template's speakers). Preview (`dry_run`) reports what it would cut.
+
+## Auto-ducking
+
+**Track ▸ Auto-Duck Music…**, or `mix.auto_duck {tracks?, voices?, depth_db?: -12, attack_ms?:
+300, release_ms?: 800, threshold_db?: -45, start?, end?}`. Writes volume automation on the music
+and effects tracks (default: the stereo audio tracks) that dips by `depth_db` while anyone on the
+speaker tracks talks, fading down over `attack_ms` before the words and back up over `release_ms`
+after them. It is ordinary automation: edit or redraw it afterwards.
+
+## Episode pre-flight check
+
+**File ▸ Episode Pre-flight Check…**, or `session.preflight {start?, end?, target?}`. Renders the
+mix once and reports:
+
+- clipping (samples at 0 dBFS);
+- integrated loudness more than 1 LU off the target (default `podcast`, -16 LUFS) and a true peak
+  over its ceiling;
+- more than 2 s of silence at the start or the end;
+- dead air: 3 s or more of near-silence (under -50 dBFS) inside the episode, with a Go button;
+- speaker balance: one speaker track (soloed, through its chain) more than 3 LU louder than another.
