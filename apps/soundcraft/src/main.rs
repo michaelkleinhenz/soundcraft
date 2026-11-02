@@ -56,6 +56,18 @@ impl eframe::App for App {
         if let Some(menu) = &mut self.3 {
             menu.sync(&self.0);
         }
+        // Podcast mode changes which items the system menu bar holds: build it again.
+        #[cfg(target_os = "macos")]
+        if self.3.as_ref().is_some_and(|menu| menu.podcast_mode() != self.0.ui.podcast_mode) {
+            self.3 = None;
+            match native_menu::NativeMenu::new(&self.0, ctx) {
+                Ok(menu) => self.3 = Some(menu),
+                Err(e) => {
+                    log::warn!("system menu bar unavailable, using the in-window menu bar: {e}");
+                    self.0.native_menu_bar = false;
+                }
+            }
+        }
         // Files dropped on the window: audio on an instrument track or a Sampler window loads
         // the sampler; otherwise sessions open and audio/MIDI import.
         for f in self.0.take_dropped_files() {
@@ -83,13 +95,13 @@ impl eframe::App for App {
         // title carries them; elsewhere the egui menu bar already does.
         let title = if self.0.native_menu_bar {
             format!(
-                "{}{} — SoundCraft — {}",
+                "{}{} — PodCraft — {}",
                 self.0.engine.session().name,
                 if self.0.engine.is_dirty() { " *" } else { "" },
                 if self.0.ui.window == soundcraft_ui_egui::MainWindow::Edit { "Edit" } else { "Mix" }
             )
         } else {
-            format!("{} — SoundCraft", self.0.engine.session().name)
+            format!("{} — PodCraft", self.0.engine.session().name)
         };
         set_title(ctx, title);
     }
@@ -149,7 +161,7 @@ fn services() -> Services {
         pick_open: Some(Box::new(|purpose: &str, _exts: &[&str]| {
             let d = rfd::FileDialog::new();
             let d = match purpose {
-                "session.open" => d.add_filter("SoundCraft Session", &["scraft"]),
+                "session.open" => d.add_filter("PodCraft Session", &["scraft"]),
                 "file.import_midi" => d.add_filter("MIDI", &["mid", "midi", "smf"]),
                 _ => d.add_filter("Audio", &FileFormat::readable_extensions()),
             };
@@ -158,7 +170,7 @@ fn services() -> Services {
         pick_save: Some(Box::new(|purpose: &str, path: &std::path::Path| {
             let mut d = match purpose {
                 "file.bounce_mix" => rfd::FileDialog::new().add_filter("Audio", &FileFormat::writable_extensions()),
-                _ => rfd::FileDialog::new().add_filter("SoundCraft Session", &["scraft"]),
+                _ => rfd::FileDialog::new().add_filter("PodCraft Session", &["scraft"]),
             };
             if let Some(dir) = path.parent().filter(|dir| dir.is_dir()) {
                 d = d.set_directory(dir);
@@ -198,7 +210,7 @@ fn main() -> eframe::Result {
     let env = Env::read();
     let (demo, no_audio, control_port) = (launch.demo, launch.no_audio, launch.control_port);
     let files = launch.files;
-    log::info!("SoundCraft {}", soundcraft_automation::args::long_version());
+    log::info!("PodCraft {}", soundcraft_automation::args::long_version());
     // The log file lives in the settings directory; opened after the arguments, so `--version`
     // leaves no file behind. Records logged until now are written to it first. Runs without
     // preferences (agents' test runs) log to standard error only, so they don't rotate away the
@@ -218,10 +230,11 @@ fn main() -> eframe::Result {
     }
 
     let engine = if demo { soundcraft_engine::demo::demo_engine() } else { Engine::default() };
-    let prefs = load_prefs(&env).unwrap_or_default();
+    // A first run (no saved settings) starts in Podcast mode, PodCraft's default.
+    let prefs = load_prefs(&env).unwrap_or_else(|| UiState { podcast_mode: true, ..UiState::default() });
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("SoundCraft")
+            .with_title("PodCraft")
             .with_inner_size(sane_window_size(prefs.window_size))
             .with_maximized(prefs.window_maximized)
             .with_min_inner_size([960.0, 600.0])
@@ -246,6 +259,7 @@ fn main() -> eframe::Result {
         }));
     }
     eframe::run_native(
+        // eframe's storage name: kept so window layout and settings survive the PodCraft rename.
         "SoundCraft",
         options,
         Box::new(move |cc| {
@@ -258,7 +272,9 @@ fn main() -> eframe::Result {
             app.leftovers = app.autosave_dir.as_deref().map(soundcraft_engine::autosave::leftovers).unwrap_or_default();
             app.preset_dir = env.config_dir.as_ref().map(|d| d.join("Presets"));
             app.extra.ui_scale = prefs.ui_scale;
+            let podcast = prefs.podcast_mode;
             app.ui = prefs;
+            soundcraft_ui_egui::podcast::set(&mut app, podcast);
             if let Some(port) = control_port {
                 let rx = control_server::start(port, cc.egui_ctx.clone());
                 app = app.with_control(rx);
@@ -306,8 +322,8 @@ mod tests {
             out.textures_delta.clear();
             out.viewport_output.values().flat_map(|v| &v.commands).filter(|c| matches!(c, egui::ViewportCommand::Title(_))).count()
         };
-        assert_eq!(titles("Song — SoundCraft"), 1);
-        assert_eq!(titles("Song — SoundCraft"), 0);
-        assert_eq!(titles("Song * — SoundCraft"), 1);
+        assert_eq!(titles("Song — PodCraft"), 1);
+        assert_eq!(titles("Song — PodCraft"), 0);
+        assert_eq!(titles("Song * — PodCraft"), 1);
     }
 }

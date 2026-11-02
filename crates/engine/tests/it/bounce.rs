@@ -161,3 +161,93 @@ fn demo_bounce_levels_are_pinned() {
         assert!(g.iter().zip(pin).all(|(v, p)| (v - f32::from_bits(p)).abs() < 1e-3), "{got:?}");
     }
 }
+
+/// A session with one stereo track playing a 440 Hz tone at `amplitude` for `secs`.
+fn tone_session(amplitude: f32, secs: f32) -> (soundcraft_engine::Engine, i64) {
+    let mut e = soundcraft_engine::Engine::default();
+    let sr = e.session().sample_rate.hz();
+    let frames = (sr as f32 * secs) as usize;
+    let samples: Vec<f32> = (0..frames).map(|i| amplitude * (std::f32::consts::TAU * 440.0 * i as f32 / sr as f32).sin()).collect();
+    let audio = soundcraft_audio_io::AudioBuffer { sample_rate: sr, channels: vec![samples.clone(), samples] };
+    let s = e.session_mut();
+    let track = s.add_track(soundcraft_model::TrackKind::Audio, soundcraft_model::ChannelFormat::Stereo, Some("Voice"));
+    let source = soundcraft_engine::io::add_source(s, "tone", audio, None, FileFormat::Wav);
+    let clip = soundcraft_model::Clip::audio(s.new_clip_id(), "tone", source, 0, 0, frames as i64);
+    soundcraft_engine::edit::place_clip(s, track, clip);
+    (e, frames as i64)
+}
+
+#[test]
+fn loudness_target_bounces_land_on_the_podcast_target() {
+    // A quiet tone (about -32 LUFS) is raised to -16 LUFS; its true peak stays under -1 dBTP.
+    let (mut e, frames) = tone_session(0.02, 6.0);
+    let dir = scratch("bounce-loudness");
+    let path = dir.join("Episode.wav");
+    let result = e
+        .execute(
+            "file.bounce_mix",
+            &serde_json::json!({"path": path, "bit_depth": "32f", "dither": false, "loudness": "podcast", "start": 0, "end": frames}),
+        )
+        .unwrap();
+    let lufs = result["lufs"].as_f64().unwrap();
+    assert!((lufs + 16.0).abs() < 0.2, "{result}");
+    assert!(result["true_peak_db"].as_f64().unwrap() <= -1.0 + 1e-3, "{result}");
+    assert!(result["gain_db"].as_f64().unwrap() > 10.0, "{result}");
+    // The file holds what was reported.
+    let (_, file) = soundcraft_audio_io::decode(&std::fs::read(&path).unwrap(), None).unwrap();
+    let mut meter = soundcraft_dsp::meter::LoudnessMeter::new(file.sample_rate as f32, file.num_channels());
+    meter.process(&file.channels, file.frames());
+    assert_eq!(f64::from(meter.integrated_lufs()), lufs);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn loudness_target_never_pushes_true_peaks_over_the_ceiling() {
+    // A stereo sine's true peak sits about 0.7 dB above its loudness: at -9 LUFS it would peak
+    // near -8.3 dBTP, so a -10 dBTP ceiling wins and the bounce lands quieter than asked.
+    let (mut e, frames) = tone_session(0.1, 4.0);
+    let dir = scratch("bounce-loudness-ceiling");
+    let path = dir.join("Hot.wav");
+    let result = e
+        .execute(
+            "file.bounce_mix",
+            &serde_json::json!({"path": path, "bit_depth": "32f", "dither": false, "loudness": -9, "true_peak": -10, "start": 0, "end": frames}),
+        )
+        .unwrap();
+    let tp = result["true_peak_db"].as_f64().unwrap();
+    assert!((tp + 10.0).abs() < 0.05, "{result}");
+    assert!(result["lufs"].as_f64().unwrap() < -9.5, "{result}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn loudness_params_are_checked() {
+    let (mut e, frames) = tone_session(0.1, 1.0);
+    let dir = scratch("bounce-loudness-params");
+    let path = dir.join("X.wav");
+    for (params, needle) in [
+        (serde_json::json!({"loudness": "loud"}), "unknown loudness"),
+        (serde_json::json!({"loudness": -60}), "outside -40..-5"),
+        (serde_json::json!({"loudness": "podcast", "true_peak": 3}), "outside -12..0"),
+        (serde_json::json!({"loudness": true}), "preset name or a LUFS number"),
+    ] {
+        let mut p = params;
+        p["path"] = serde_json::json!(path);
+        p["end"] = serde_json::json!(frames);
+        let err = e.execute("file.bounce_mix", &p).unwrap_err().to_string();
+        assert!(err.contains(needle), "{p}: {err}");
+    }
+    assert!(!path.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn loudness_target_gain_handles_silence_and_both_limits() {
+    let t = soundcraft_engine::io::LoudnessTarget::PODCAST;
+    assert_eq!(t.gain_db(-144.0, -144.0), 0.0, "silence is left alone");
+    assert_eq!(t.gain_db(f32::NAN, 0.0), 0.0);
+    assert_eq!(t.gain_db(-26.0, -12.0), 10.0, "loudness decides");
+    assert_eq!(t.gain_db(-26.0, -5.0), 4.0, "the ceiling decides");
+    assert_eq!(t.gain_db(-10.0, -1.0), -6.0, "too loud comes down");
+    assert_eq!(soundcraft_engine::io::LoudnessTarget::preset("PODCAST_MONO").map(|t| t.lufs), Some(-19.0));
+}

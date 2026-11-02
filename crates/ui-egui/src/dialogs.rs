@@ -30,31 +30,116 @@ pub mod spot;
 
 #[derive(Debug, Clone)]
 pub enum Dialog {
-    NewTracks { count: u32, format: String, kind: String, timebase: String, name: String },
-    NewSession { name: String, sample_rate: u32, demo: bool },
-    Bounce { path: String, format: FileFormat, bit_depth: String, normalize: bool, dither: bool },
-    RenameTrack { id: TrackId, name: String },
-    RenameClip { id: ClipId, name: String },
-    RenameMarker { id: soundcraft_model::MarkerId, name: String },
-    ClearClips { clips: Vec<ClipId>, sources: Vec<SourceId>, message: String },
-    PathPrompt { cmd: String, title: String, path: String, key: String },
-    Number { cmd: String, title: String, key: String, value: f64, suffix: String },
-    TempoChange { at: Samples, bpm: f64 }, // from double-clicking the tempo ruler
+    NewTracks {
+        count: u32,
+        format: String,
+        kind: String,
+        timebase: String,
+        name: String,
+    },
+    /// `template`: blank, demo or podcast; `None` until shown, then Podcast mode's choice
+    /// (podcast) or blank. `speakers`: the podcast template's speaker names, comma-separated.
+    NewSession {
+        name: String,
+        sample_rate: u32,
+        template: Option<String>,
+        speakers: String,
+    },
+    /// `loudness`: a loudness preset id or "off"; `None` until shown, then the podcast preset in
+    /// Podcast mode and off outside it.
+    Bounce {
+        path: String,
+        format: FileFormat,
+        bit_depth: String,
+        normalize: bool,
+        dither: bool,
+        loudness: Option<String>,
+    },
+    RenameTrack {
+        id: TrackId,
+        name: String,
+    },
+    RenameClip {
+        id: ClipId,
+        name: String,
+    },
+    RenameMarker {
+        id: soundcraft_model::MarkerId,
+        name: String,
+    },
+    ClearClips {
+        clips: Vec<ClipId>,
+        sources: Vec<SourceId>,
+        message: String,
+    },
+    PathPrompt {
+        cmd: String,
+        title: String,
+        path: String,
+        key: String,
+    },
+    Number {
+        cmd: String,
+        title: String,
+        key: String,
+        value: f64,
+        suffix: String,
+    },
+    TempoChange {
+        at: Samples,
+        bpm: f64,
+    }, // from double-clicking the tempo ruler
     Spot(crate::spot::Spot),
-    Fades { shape: String },
-    StripSilence { threshold: f64, min_ms: f64, pre_ms: f64, post_ms: f64 },
+    Fades {
+        shape: String,
+    },
+    StripSilence {
+        threshold: f64,
+        min_ms: f64,
+        pre_ms: f64,
+        post_ms: f64,
+    },
     // Strip Silence › Rename: `strip` holds the Strip Silence values to return to.
-    StripSilenceRename { strip: [f64; 4], names: StripNames },
+    StripSilenceRename {
+        strip: [f64; 4],
+        names: StripNames,
+    },
     // Clip List › Auto Rename: the names that editing gives the clips it separates from `clips`.
-    AutoRename { clips: Vec<ClipId>, names: StripNames },
+    AutoRename {
+        clips: Vec<ClipId>,
+        names: StripNames,
+    },
     // `id: None` creates (Track › Group…); `id: Some` modifies that group (Groups list › Modify Group…).
-    Group { id: Option<GroupId>, name: String, edit: bool, mix: bool, members: Vec<(u64, String, bool)> },
-    Session { frame_rate: String, bit_depth: String },
+    Group {
+        id: Option<GroupId>,
+        name: String,
+        edit: bool,
+        mix: bool,
+        members: Vec<(u64, String, bool)>,
+    },
+    Session {
+        frame_rate: String,
+        bit_depth: String,
+    },
     // Clip › Loop…: `length` is typed in `format`, measured from `start` (the first selected clip's).
     // `filled` is the text the field opened with and the exact length it stands for.
-    Loop { by: LoopBy, count: u32, length: String, format: soundcraft_time::TimeFormat, start: Samples, filled: (String, Samples) },
-    ScoreSetup { title: String, composer: String, bars_per_system: u32, show_track_names: bool },
-    SaveChanges { then: (String, Value) },
+    Loop {
+        by: LoopBy,
+        count: u32,
+        length: String,
+        format: soundcraft_time::TimeFormat,
+        start: Samples,
+        filled: (String, Samples),
+    },
+    ScoreSetup {
+        title: String,
+        composer: String,
+        bars_per_system: u32,
+        show_track_names: bool,
+    },
+    SaveChanges {
+        then: (String, Value),
+    },
 }
 
 /// The Clip Looping dialog's choice of how far a clip is looped.
@@ -169,7 +254,7 @@ impl Dialogs {
             "track.new" => {
                 Dialog::NewTracks { count: 1, format: "Mono".into(), kind: "audio".into(), timebase: "samples".into(), name: "Audio".into() }
             }
-            "session.new" => Dialog::NewSession { name: "Untitled".into(), sample_rate: 48_000, demo: false },
+            "session.new" => Dialog::NewSession { name: "Untitled".into(), sample_rate: 48_000, template: None, speakers: "Host, Guest".into() },
             "file.bounce_mix" => {
                 let dir = e
                     .path
@@ -183,6 +268,7 @@ impl Dialogs {
                     bit_depth: "24".into(),
                     normalize: false,
                     dither: false,
+                    loudness: None,
                 }
             }
             "file.import_audio" => Dialog::PathPrompt { cmd: id.into(), title: "Import Audio".into(), path: home, key: "path".into() },
@@ -281,22 +367,26 @@ fn clear_message(s: &Session, clips: &[ClipId], sources: &[SourceId]) -> Option<
     Some(text)
 }
 
-/// The New Tracks form; the command to run once Create is pressed.
-fn new_tracks_form(
-    ui: &mut egui::Ui,
-    count: &mut u32,
-    format: &mut String,
-    kind: &mut String,
-    timebase: &mut String,
-    name: &mut String,
-    enter: bool,
-) -> Option<(String, Value)> {
+/// The New Tracks dialog's fields, and whether Podcast mode trims its choices.
+struct NewTracksForm<'a> {
+    count: &'a mut u32,
+    format: &'a mut String,
+    kind: &'a mut String,
+    timebase: &'a mut String,
+    name: &'a mut String,
+    podcast: bool,
+}
+
+/// The New Tracks form; the command to run once Create is pressed. Podcast mode offers mono and
+/// stereo, no MIDI, instrument or video tracks, and no ticks timebase.
+fn new_tracks_form(ui: &mut egui::Ui, form: NewTracksForm<'_>, enter: bool) -> Option<(String, Value)> {
+    let NewTracksForm { count, format, kind, timebase, name, podcast } = form;
     ui.horizontal(|ui| {
         let create = ui.label("Create");
         ui.add(egui::DragValue::new(count).range(1..=128)).labelled_by(create.id);
         ui.label("new");
         let fmt = craft_ui::ComboBox::from_id_salt("nt_fmt").selected_text(format.as_str()).show_ui(ui, |ui| {
-            for f in soundcraft_model::ChannelFormat::ALL {
+            for f in soundcraft_model::ChannelFormat::ALL.into_iter().filter(|f| !podcast || crate::podcast::offers_format(*f)) {
                 ui.selectable_value(format, f.label().to_string(), f.label());
             }
         });
@@ -304,7 +394,7 @@ fn new_tracks_form(
         let kind_combo = craft_ui::ComboBox::from_id_salt("nt_kind")
             .selected_text(soundcraft_model::TrackKind::from_id(kind).map_or("Audio Track", |k| k.label()))
             .show_ui(ui, |ui| {
-                for k in soundcraft_model::TrackKind::ALL {
+                for k in soundcraft_model::TrackKind::ALL.into_iter().filter(|k| !podcast || crate::podcast::offers_track_kind(*k)) {
                     if ui.selectable_label(kind == k.id(), k.label()).clicked() {
                         *kind = k.id().to_string();
                         *name = k.default_name().to_string();
@@ -312,12 +402,15 @@ fn new_tracks_form(
                 }
             });
         kind_combo.response.accessible_name("Track kind");
-        ui.label("in");
-        let tb = craft_ui::ComboBox::from_id_salt("nt_tb").selected_text(if timebase == "ticks" { "Ticks" } else { "Samples" }).show_ui(ui, |ui| {
-            ui.selectable_value(timebase, "samples".to_string(), "Samples");
-            ui.selectable_value(timebase, "ticks".to_string(), "Ticks");
-        });
-        tb.response.accessible_name("Timebase");
+        if !podcast {
+            ui.label("in");
+            let tb =
+                craft_ui::ComboBox::from_id_salt("nt_tb").selected_text(if timebase == "ticks" { "Ticks" } else { "Samples" }).show_ui(ui, |ui| {
+                    ui.selectable_value(timebase, "samples".to_string(), "Samples");
+                    ui.selectable_value(timebase, "ticks".to_string(), "Ticks");
+                });
+            tb.response.accessible_name("Timebase");
+        }
     });
     ui.horizontal(|ui| {
         ui.label("Name:");
@@ -501,11 +594,13 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
             ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
             match &mut d {
                 Dialog::NewTracks { count, format, kind, timebase, name } => {
-                    if let Some(cmd) = new_tracks_form(ui, count, format, kind, timebase, name, enter) {
+                    let form = NewTracksForm { count, format, kind, timebase, name, podcast: app.ui.podcast_mode };
+                    if let Some(cmd) = new_tracks_form(ui, form, enter) {
                         action = Some(cmd);
                     }
                 }
-                Dialog::NewSession { name, sample_rate, demo } => {
+                Dialog::NewSession { name, sample_rate, template, speakers } => {
+                    let template = template.get_or_insert_with(|| if app.ui.podcast_mode { "podcast".into() } else { "blank".into() });
                     ui.horizontal(|ui| {
                         ui.label("Name");
                         crate::widgets::named_text_field(ui.text_edit_singleline(name), "Name");
@@ -515,15 +610,28 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                             ui.selectable_value(sample_rate, r, format!("{r} Hz"));
                         }
                     });
-                    crate::widgets::checkbox(ui, demo, "Start from the demo session");
+                    let templates = [("podcast", "Podcast episode"), ("blank", "Blank session"), ("demo", "Demo song")];
+                    let shown = templates.iter().find(|(id, _)| *id == template.as_str()).map_or("Blank session", |(_, label)| *label);
+                    craft_ui::ComboBox::from_label("Template").selected_text(shown).show_ui(ui, |ui| {
+                        for (id, label) in templates {
+                            ui.selectable_value(template, id.to_string(), label);
+                        }
+                    });
+                    if template.as_str() == "podcast" {
+                        ui.horizontal(|ui| {
+                            ui.label("Speakers");
+                            crate::widgets::named_text_field(ui.add(egui::TextEdit::singleline(speakers).desired_width(240.0)), "Speakers")
+                                .on_hover_text("One mono track with a voice chain per name, separated by commas");
+                        });
+                    }
                     if buttons(ui, "Create", enter) {
-                        action = Some((
-                            "session.new".into(),
-                            json!({"name": name, "sample_rate": sample_rate, "template": if *demo { "demo" } else { "blank" }}),
-                        ));
+                        let names: Vec<&str> = speakers.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+                        action =
+                            Some(("session.new".into(), json!({"name": name, "sample_rate": sample_rate, "template": template, "speakers": names})));
                     }
                 }
-                Dialog::Bounce { path, format, bit_depth, normalize, dither } => {
+                Dialog::Bounce { path, format, bit_depth, normalize, dither, loudness } => {
+                    let loudness = loudness.get_or_insert_with(|| if app.ui.podcast_mode { "podcast".into() } else { "off".into() });
                     bounce_file_row(app, ui, path, format);
                     ui.horizontal(|ui| {
                         craft_ui::ComboBox::from_label("Format").selected_text(format.name()).show_ui(ui, |ui| {
@@ -537,11 +645,25 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                             }
                         });
                     });
-                    crate::widgets::checkbox(ui, normalize, "Normalize to -0.1 dBFS");
+                    let presets = soundcraft_engine::io::LoudnessTarget::PRESETS;
+                    let shown = presets.iter().find(|(id, _, _)| *id == loudness.as_str()).map_or("Off", |(_, label, _)| *label);
+                    craft_ui::ComboBox::from_label("Loudness")
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(loudness, "off".to_string(), "Off");
+                            for (id, label, _) in presets {
+                                ui.selectable_value(loudness, (*id).to_string(), *label);
+                            }
+                        })
+                        .response
+                        .on_hover_text("Normalizes the bounce to this integrated loudness (ITU-R BS.1770), keeping true peaks at or below -1 dBTP");
+                    let by_loudness = loudness.as_str() != "off";
+                    ui.add_enabled_ui(!by_loudness, |ui| crate::widgets::checkbox(ui, normalize, "Normalize to -0.1 dBFS"));
                     // 32-bit float keeps every sample as it is: there is nothing to dither.
                     ui.add_enabled_ui(bit_depth.as_str() != "32f", |ui| {
-                        crate::widgets::checkbox(ui, dither, "Dither (TPDF)")
-                            .on_hover_text("Adds ±1 LSB triangular dither when writing 16- or 24-bit files. Leave it off when the master chain already dithers.");
+                        crate::widgets::checkbox(ui, dither, "Dither (TPDF)").on_hover_text(
+                            "Adds ±1 LSB triangular dither when writing 16- or 24-bit files. Leave it off when the master chain already dithers.",
+                        );
                     });
                     ui.label(
                         egui::RichText::new("Bounces the edit selection, or the whole session when nothing is selected.")
@@ -552,7 +674,14 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                         let p = std::path::Path::new(path.as_str()).with_extension(format.default_extension());
                         crate::bounce::start(
                             app,
-                            &json!({"path": p.to_string_lossy(), "format": format.default_extension(), "bit_depth": bit_depth, "normalize": normalize, "dither": *dither && bit_depth.as_str() != "32f"}),
+                            &json!({
+                                "path": p.to_string_lossy(),
+                                "format": format.default_extension(),
+                                "bit_depth": bit_depth,
+                                "normalize": *normalize && !by_loudness,
+                                "loudness": loudness,
+                                "dither": *dither && bit_depth.as_str() != "32f"
+                            }),
                         );
                         keep = false;
                     }

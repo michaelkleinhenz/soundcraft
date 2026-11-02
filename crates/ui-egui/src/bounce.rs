@@ -29,7 +29,13 @@ pub fn step(app: &mut SoundApp, ctx: &egui::Context) {
             return;
         }
         Ok(Some(done)) => {
-            format!("Bounced {} (peak {:.1} dBFS, {:.1} LUFS)", job.path().file_name().unwrap_or_default().to_string_lossy(), done.peak_db, done.lufs)
+            format!(
+                "Bounced {} ({:.1} LUFS, true peak {:.1} dBTP, peak {:.1} dBFS)",
+                job.path().file_name().unwrap_or_default().to_string_lossy(),
+                done.lufs,
+                done.true_peak_db,
+                done.peak_db
+            )
         }
         Err(e) => e.to_string(),
     };

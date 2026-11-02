@@ -27,6 +27,7 @@ pub mod menus;
 pub mod mix_window;
 pub mod palette;
 pub mod panels;
+pub mod podcast;
 pub mod shortcuts;
 pub mod theme;
 pub mod toolbar;
@@ -142,6 +143,16 @@ pub struct UiState {
     pub window_size: [f32; 2],
     pub window_maximized: bool,
     pub ui_scale: f32,
+    /// Podcast mode ([`podcast`]): hides the music, video and surround features. Off in
+    /// `Default` (the library's full workstation); the apps switch it on for a first run, and a
+    /// settings file saved before the mode existed reads as on.
+    #[serde(default = "podcast_mode_default")]
+    pub podcast_mode: bool,
+}
+
+/// What a settings file without `podcast_mode` reads as: PodCraft starts in Podcast mode.
+fn podcast_mode_default() -> bool {
+    true
 }
 
 impl Default for UiState {
@@ -203,6 +214,7 @@ impl Default for UiState {
             window_size: [1600.0, 1000.0],
             window_maximized: false,
             ui_scale: 1.0,
+            podcast_mode: false,
         }
     }
 }

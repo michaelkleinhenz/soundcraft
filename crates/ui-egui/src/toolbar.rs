@@ -37,7 +37,9 @@ pub fn show(app: &mut SoundApp, ui: &mut Ui) {
                 counters(app, ui);
                 grid_nudge(app, ui);
                 transport(app, ui);
-                tempo_meter(app, ui);
+                if !app.ui.podcast_mode {
+                    tempo_meter(app, ui);
+                }
                 output_meter(app, ui);
             });
         });
@@ -213,6 +215,9 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
                     ("options.automation_follows_edit", "wave", e.automation_follows_edit, "Automation Follows Edit"),
                 ];
                 for (id, icon, on, tip) in toggles {
+                    if app.ui.podcast_mode && id == "options.mirrored_midi" {
+                        continue;
+                    }
                     if icon_button(ui, vec2(36.0, 18.0), icon, on, tip).clicked() {
                         let _ = app.run(id, json!({}));
                     }

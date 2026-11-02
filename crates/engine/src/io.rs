@@ -167,7 +167,9 @@ pub struct Bounce {
     bus: Option<BusId>,
     fold: Option<ChannelFormat>,
     normalize: bool,
-    /// Measuring the peak to normalize to, the first of two passes.
+    /// Loudness normalization instead of peak normalization (see [`Bounce::with_loudness_target`]).
+    target: Option<LoudnessTarget>,
+    /// Measuring the peak (or loudness) to normalize to, the first of two passes.
     measuring: bool,
     render: soundcraft_mix::RangeRender,
     block: Vec<Vec<f32>>,
@@ -185,6 +187,57 @@ pub struct Bounced {
     pub peak_db: f32,
     pub lufs: f32,
     pub true_peak_db: f32,
+    /// The gain normalization applied, in dB (0 without normalization).
+    pub gain_db: f32,
+}
+
+/// What a loudness-normalized bounce aims for: integrated loudness (ITU-R BS.1770, gated) and a
+/// true-peak ceiling. The gain is the smaller of the two that meet them, so a mix whose peaks are
+/// too hot for the target lands quieter than it rather than over the ceiling.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LoudnessTarget {
+    pub lufs: f32,
+    pub true_peak_db: f32,
+}
+
+impl LoudnessTarget {
+    /// The lowest and highest integrated loudness a target may ask for.
+    pub const LUFS_RANGE: std::ops::RangeInclusive<f32> = -40.0..=-5.0;
+    /// The lowest and highest true-peak ceiling a target may ask for.
+    pub const TRUE_PEAK_RANGE: std::ops::RangeInclusive<f32> = -12.0..=0.0;
+    /// Apple Podcasts and Spotify: -16 LUFS for a stereo episode, -1 dBTP.
+    pub const PODCAST: LoudnessTarget = LoudnessTarget { lufs: -16.0, true_peak_db: -1.0 };
+    /// A mono episode: -19 LUFS sounds as loud as -16 LUFS stereo.
+    pub const PODCAST_MONO: LoudnessTarget = LoudnessTarget { lufs: -19.0, true_peak_db: -1.0 };
+    /// Video platforms: -14 LUFS, -1 dBTP.
+    pub const VIDEO: LoudnessTarget = LoudnessTarget { lufs: -14.0, true_peak_db: -1.0 };
+    /// Broadcast (EBU R128): -23 LUFS, -1 dBTP.
+    pub const BROADCAST: LoudnessTarget = LoudnessTarget { lufs: -23.0, true_peak_db: -1.0 };
+
+    /// The named presets: id, label, target.
+    pub const PRESETS: &'static [(&'static str, &'static str, LoudnessTarget)] = &[
+        ("podcast", "Podcast, stereo (-16 LUFS)", LoudnessTarget::PODCAST),
+        ("podcast_mono", "Podcast, mono (-19 LUFS)", LoudnessTarget::PODCAST_MONO),
+        ("video", "Video platforms (-14 LUFS)", LoudnessTarget::VIDEO),
+        ("broadcast", "Broadcast, EBU R128 (-23 LUFS)", LoudnessTarget::BROADCAST),
+    ];
+
+    /// The preset named `id`.
+    pub fn preset(id: &str) -> Option<LoudnessTarget> {
+        Self::PRESETS.iter().find(|(p, _, _)| p.eq_ignore_ascii_case(id)).map(|(_, _, t)| *t)
+    }
+
+    /// The gain, in dB, that moves a mix measured at `lufs` and `true_peak_db` to this target
+    /// without passing the ceiling; 0 for silence (or anything not measurable).
+    pub fn gain_db(&self, lufs: f32, true_peak_db: f32) -> f32 {
+        if !lufs.is_finite() || lufs <= soundcraft_dsp::MIN_DB {
+            return 0.0;
+        }
+        let to_target = self.lufs - lufs;
+        let to_ceiling = if true_peak_db.is_finite() && true_peak_db > soundcraft_dsp::MIN_DB { self.true_peak_db - true_peak_db } else { to_target };
+        let g = to_target.min(to_ceiling);
+        if g.is_finite() { g.clamp(-96.0, 96.0) } else { 0.0 }
+    }
 }
 
 impl Bounce {
@@ -227,6 +280,7 @@ impl Bounce {
             bus,
             fold,
             normalize,
+            target: None,
             measuring: normalize,
             render,
             block: Vec::new(),
@@ -236,6 +290,15 @@ impl Bounce {
             meter,
             enc: Some(enc),
         })
+    }
+
+    /// Normalize to `target`'s loudness, within its true-peak ceiling, instead of to a peak level.
+    /// Renders twice: once to measure, once to write.
+    pub fn with_loudness_target(mut self, target: LoudnessTarget) -> Bounce {
+        self.target = Some(target);
+        self.normalize = true;
+        self.measuring = true;
+        self
     }
 
     pub fn path(&self) -> &Path {
@@ -265,15 +328,22 @@ impl Bounce {
                     fill(&mut self.block, chunk, n, self.fold, self.gain);
                     self.done += n;
                     self.peak = self.peak.max(soundcraft_dsp::offline::peak(&self.block));
-                    if !self.measuring {
+                    if !self.measuring || self.target.is_some() {
                         self.meter.process(&self.block, n);
-                        if let Some(enc) = &mut self.enc {
-                            enc.write(&self.block, n).map_err(|err| EngineError::Io(format!("{}: {err}", self.path.display())))?;
-                        }
+                    }
+                    if !self.measuring
+                        && let Some(enc) = &mut self.enc
+                    {
+                        enc.write(&self.block, n).map_err(|err| EngineError::Io(format!("{}: {err}", self.path.display())))?;
                     }
                 }
                 None if self.measuring => {
-                    self.gain = if self.peak > 0.0 { soundcraft_dsp::db_to_gain(-0.1) / self.peak } else { 1.0 };
+                    self.gain = match self.target {
+                        Some(t) => soundcraft_dsp::db_to_gain(t.gain_db(self.meter.integrated_lufs(), self.meter.true_peak_db())),
+                        None if self.peak > 0.0 => soundcraft_dsp::db_to_gain(-0.1) / self.peak,
+                        None => 1.0,
+                    };
+                    self.meter.reset();
                     self.peak = 0.0;
                     self.done = 0;
                     self.measuring = false;
@@ -306,6 +376,7 @@ impl Bounce {
             peak_db: soundcraft_dsp::gain_to_db(self.peak),
             lufs: self.meter.integrated_lufs(),
             true_peak_db: self.meter.true_peak_db(),
+            gain_db: if self.normalize { soundcraft_dsp::gain_to_db(self.gain) } else { 0.0 },
         })
     }
 }

@@ -24,7 +24,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("window.narrow_mix", "Narrow Mix", "View > Narrow Mix", Some("Cmd+Alt+M")),
     ("window.session_info", "Session Info", "", None),
     ("window.audio_health", "Session Audio Health", "", None),
-    ("window.about", "About SoundCraft", "", None),
+    ("window.about", "About PodCraft", "", None),
     ("window.close", "Close Window", "Window > Close Window", Some("Cmd+W")),
     ("window.hide_floating", "Hide All Floating Windows", "Window > Hide All Floating Windows", Some("Cmd+Ctrl+W")),
     ("window.midi_editor", "MIDI Editor", "Window > MIDI Editor", None),
@@ -75,6 +75,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("ui.bounce_dialog", "Bounce Mix…", "", None),
     ("ui.set", "Set UI State", "", None),
     ("ui.theme", "Appearance", "", None),
+    ("ui.podcast_mode", "Podcast Mode", "", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -229,8 +230,8 @@ pub fn menu_bar(app: &mut SoundApp, ui: &mut egui::Ui) {
         ui,
         |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("SoundCraft", |ui| {
-                    if ui.button("About SoundCraft").clicked() {
+                ui.menu_button("PodCraft", |ui| {
+                    if ui.button("About PodCraft").clicked() {
                         app.ui.show_about = true;
                     }
                     if ui.button("Check for Updates…").clicked() {
@@ -243,19 +244,25 @@ pub fn menu_bar(app: &mut SoundApp, ui: &mut egui::Ui) {
                         let _ = app.run("window.audio_health", json!({"value": true}));
                     }
                     ui.separator();
+                    let mut podcast = app.ui.podcast_mode;
+                    if ui.checkbox(&mut podcast, "Podcast Mode").on_hover_text("Hide MIDI, tempo, video and surround features").changed() {
+                        let _ = app.run("ui.podcast_mode", json!({"value": podcast}));
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("Quit").clicked() {
                         let _ = crate::dialogs::run_or_ask(app, "app.quit", json!({}));
                     }
                 });
                 let extra = ui_aliases();
-                for root in tree() {
+                for root in crate::podcast::visible_tree(tree(), app.ui.podcast_mode) {
                     ui.menu_button(&root.label, |ui| {
                         for c in &root.children {
                             menu_node(app, ui, c, &extra);
                             if c.path == "File > Open" {
                                 crate::recent::menu(app, ui);
                             }
-                            if c.path == "Track > New..." {
+                            if c.path == "Track > New..." && !app.ui.podcast_mode {
                                 instrument_menu(app, ui);
                             }
                         }
@@ -340,7 +347,9 @@ pub fn command_for_path(path: &str, extra: &[(&str, &str)]) -> Option<String> {
 pub fn item_state(app: &SoundApp, path: &str, id: Option<&str>) -> (bool, bool) {
     let enabled = match id {
         Some(i)
-            if i.starts_with("window.") || i.starts_with("view.mix_section") || matches!(i, "audiosuite.process" | "ui.dock" | "ui.dock.reset") =>
+            if i.starts_with("window.")
+                || i.starts_with("view.mix_section")
+                || matches!(i, "audiosuite.process" | "ui.dock" | "ui.dock.reset" | "ui.podcast_mode") =>
         {
             true
         }
@@ -368,6 +377,7 @@ fn checked_state(app: &SoundApp, path: &str, id: Option<&str>) -> bool {
         Some("options.pre_fader_metering") => e.pre_fader_metering,
         Some("view.ruler") => path.rsplit(" > ").next().map(ruler_id).is_some_and(|r| e.rulers.iter().any(|x| x == r)),
         Some("view.main_counter") => path.rsplit(" > ").next().map(ruler_id).is_some_and(|r| e.main_counter.id() == r),
+        Some("ui.podcast_mode") => app.ui.podcast_mode,
         Some("window.mix") => app.ui.window == MainWindow::Mix,
         Some("window.edit") => app.ui.window == MainWindow::Edit,
         Some("window.track_list") => app.ui.show_tracks_list,
@@ -528,6 +538,7 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
         json!({"value": *v})
     };
     let r = match id {
+        "ui.podcast_mode" => crate::podcast::command(app, p),
         "app.checkForUpdates" | "help.checkForUpdates" => {
             crate::updates_ui::check(app);
             json!({})

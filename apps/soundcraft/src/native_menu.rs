@@ -19,6 +19,8 @@ pub struct NativeMenu {
     events: Receiver<MenuEvent>,
     /// When `sync` last walked the entries; see `SYNC_EVERY`.
     last_sync: Option<std::time::Instant>,
+    /// Whether the items were filtered for Podcast mode; the menu is rebuilt when it changes.
+    podcast_mode: bool,
 }
 
 /// `sync` walks every menu leaf (~500), so it runs a few times a second rather than every frame,
@@ -30,23 +32,25 @@ impl NativeMenu {
     pub fn new(app: &SoundApp, ctx: &egui::Context) -> muda::Result<Self> {
         let menu = Menu::new();
         let (tx, events) = channel();
-        let mut native = Self { menu, entries: Vec::new(), events, last_sync: None };
-        let app_menu = Submenu::new("SoundCraft", true);
-        native.add_item(app, &app_menu, "About SoundCraft", "", Some("window.about".into()))?;
+        let mut native = Self { menu, entries: Vec::new(), events, last_sync: None, podcast_mode: app.ui.podcast_mode };
+        let app_menu = Submenu::new("PodCraft", true);
+        native.add_item(app, &app_menu, "About PodCraft", "", Some("window.about".into()))?;
         native.add_item(app, &app_menu, "Session Info", "", Some("window.session_info".into()))?;
         native.add_item(app, &app_menu, "Session Audio Health", "", Some("window.audio_health".into()))?;
+        app_menu.append(&PredefinedMenuItem::separator())?;
+        native.add_item(app, &app_menu, "Podcast Mode", "", Some("ui.podcast_mode".into()))?;
         app_menu.append(&PredefinedMenuItem::separator())?;
         app_menu.append(&PredefinedMenuItem::services(None))?;
         app_menu.append(&PredefinedMenuItem::separator())?;
         // muda's own Hide items take ⌘H and ⌥⌘H, which are Heal Separation and Copy to Send.
-        app_menu.append(&MenuItem::with_id("hide", "Hide SoundCraft", true, None))?;
+        app_menu.append(&MenuItem::with_id("hide", "Hide PodCraft", true, None))?;
         app_menu.append(&MenuItem::with_id("hide_others", "Hide Others", true, None))?;
         app_menu.append(&PredefinedMenuItem::show_all(None))?;
         app_menu.append(&PredefinedMenuItem::separator())?;
-        native.add_item(app, &app_menu, "Quit SoundCraft", "", Some("app.quit".into()))?;
+        native.add_item(app, &app_menu, "Quit PodCraft", "", Some("app.quit".into()))?;
         native.menu.append(&app_menu)?;
         let aliases = menus::ui_aliases();
-        for root in menus::tree() {
+        for root in soundcraft_ui_egui::podcast::visible_tree(menus::tree(), app.ui.podcast_mode) {
             let submenu = native.add_branch(app, &root, &aliases)?;
             native.menu.append(&submenu)?;
         }
@@ -102,6 +106,11 @@ impl NativeMenu {
                 }
             }
         }
+    }
+
+    /// Whether the items were filtered for Podcast mode.
+    pub fn podcast_mode(&self) -> bool {
+        self.podcast_mode
     }
 
     /// Refresh after engine/control changes; avoid touching Cocoa items with unchanged state.
