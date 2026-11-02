@@ -13,6 +13,9 @@ pub enum MarkerKind {
     /// A point that flags a place still needing an edit (a flub, a cough, a retake). Not a
     /// chapter: exports leave these out.
     Edit,
+    /// Where an ad goes (pre-, mid- or post-roll): Insert Segment can fill every one with a sponsor
+    /// read. Not a chapter.
+    Ad,
     /// A location that only recalls view settings.
     None,
 }

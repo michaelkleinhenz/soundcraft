@@ -80,11 +80,12 @@ take over Commands Focus' M and E there):
 |---|---|---|---|
 | **M** | `markers.add_chapter` (Edit ▸ Add Chapter Marker) | yellow, "Chapter n" | starts a chapter in the exports |
 | **E** | `markers.add_edit {comments?}` (Edit ▸ Add Edit Marker) | red triangle, "Edit n" | flags a spot to fix later (a flub, a cough, a retake) |
+| | `markers.add_ad {comments?}` (Edit ▸ Add Ad Slot Marker, or **+ Ad** in Memory Locations) | green diamond, "Ad n" | where an ad or sponsor read goes ([Segments](#segments-and-ad-slots)) |
 
 Both go at the playhead while playing, else at the insertion point, so you can tap them while
 listening back. Edit ▸ Go to Next / Previous Edit Marker (`markers.next_edit`,
 `markers.previous_edit`) step through the edit markers only; delete one in Window ▸ Memory
-Locations once it's fixed. Edit markers are never chapters. Outside Podcast mode the same keys
+Locations once it's fixed. Edit and ad slot markers are never chapters. Outside Podcast mode the same keys
 work with Commands Keyboard Focus off, and Enter still adds a plain marker.
 
 ## Chapters
@@ -163,6 +164,37 @@ mix once and reports:
 - more than 2 s of silence at the start or the end;
 - dead air: 3 s or more of near-silence (under -50 dBFS) inside the episode, with a Go button;
 - speaker balance: one speaker track (soloed, through its chain) more than 3 LU louder than another.
+
+## Syncing remote recordings
+
+**Track ▸ Sync Remote Recordings…**, or `track.sync_recordings {reference?, tracks?, method?:
+auto|clap, max_offset_s?: 30, drift?: true, clap_window_s?: 60, dry_run?}`. For a double-ender,
+where each speaker records themselves locally and the call is recorded too: the speaker tracks
+(default: the mono audio tracks) move to line up with the reference, the track that hears everyone
+(default: one named call, zoom, riverside or reference).
+
+- **Voices** (`auto`) matches the tracks' loudness envelopes (1 ms steps) by cross-correlation over
+  the first ten minutes, searching ±`max_offset_s`. With `drift`, it matches four stretches across
+  the recording again; when a recorder's clock ran fast or slow (2 ppm to 0.1%), the track's clips
+  are played that much faster or slower (clip varispeed) so the end lines up as well as the start.
+- **Clap** lines up the loudest moment in the first `clap_window_s` of each track.
+
+Material moved before the session start is trimmed off. Analyze (`dry_run`) reports the offset,
+the drift in ms an hour and how well each track matched; a track that matches under 15% is left
+where it is.
+
+## Segments and ad slots
+
+**Edit ▸ Insert Segment…**, or `segment.insert {path | source, name?, at? | marker? | ad_slots?,
+ripple?: true, track?, fade_ms?: 20}`. Drops a reusable piece of audio into the episode at the
+insertion point, at a marker, or at every ad slot marker. With `ripple` it opens room on every
+track first (clips, automation and later markers move later; a marker exactly at the spot stays at
+the start of the segment), so it suits intros, outros and sponsor reads; without, it lays the audio
+over what is there, for stingers or music under talk. It goes on the **Segments** track (made when
+missing) with short fades.
+
+The window keeps a library of segment files (name, kind: Intro, Outro, Sponsor, Stinger or Other)
+with the app's settings, so the same intro and sponsor reads are one click away in every episode.
 
 ## Voice cleanup
 

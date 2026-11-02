@@ -92,8 +92,8 @@ pub struct UiState {
     pub show_episode_info: bool,
     #[serde(skip)]
     pub episode_draft: Option<soundcraft_model::EpisodeInfo>,
-    /// The Podcast Tools window (Tighten Pauses, Auto-Duck, Pre-flight), its tab, and the last
-    /// pre-flight report or pause preview.
+    /// The Podcast Tools window (Tighten Pauses, Auto-Duck, Pre-flight, Sync, Segments), its tab,
+    /// and the last report or preview.
     #[serde(skip)]
     pub podcast_tools: Option<crate::panels::PodcastTool>,
     #[serde(skip)]
@@ -158,6 +158,10 @@ pub struct UiState {
     /// settings file saved before the mode existed reads as on.
     #[serde(default = "podcast_mode_default")]
     pub podcast_mode: bool,
+    /// Edit › Insert Segment's library: intros, outros, sponsor reads and stingers kept across
+    /// episodes (they are files, so the list lives with the settings, not the session).
+    #[serde(default)]
+    pub segment_library: Vec<crate::panels::LibrarySegment>,
 }
 
 /// What a settings file without `podcast_mode` reads as: PodCraft starts in Podcast mode.
@@ -229,6 +233,7 @@ impl Default for UiState {
             window_maximized: false,
             ui_scale: 1.0,
             podcast_mode: false,
+            segment_library: Vec::new(),
         }
     }
 }

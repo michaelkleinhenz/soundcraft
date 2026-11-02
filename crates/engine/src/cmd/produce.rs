@@ -1,7 +1,8 @@
-//! Podcast production tools: Tighten Pauses (B4), Auto-Duck (B5) and the episode pre-flight
-//! check (B11). All three find speech with Strip Silence's detector on the speaker tracks.
+//! Podcast production tools: Tighten Pauses (B4), Auto-Duck (B5), the episode pre-flight check
+//! (B11), which find speech with Strip Silence's detector on the speaker tracks, and Sync Remote
+//! Recordings (B3).
 
-use super::{CommandSpec, always, bad, f32_or, f64_or, range_param, str_param, tracks_param};
+use super::{CommandSpec, always, bad, bool_or, f32_or, f64_or, range_param, str_param, track_param, tracks_param};
 use crate::preflight::{analyze_mix, merge, pauses, speaker_tracks, speech, track_loudness};
 use crate::{Engine, Result, cmd};
 use serde_json::{Value, json};
@@ -27,6 +28,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{tracks?: what to duck (default: stereo audio tracks), voices?: speaker track ids (default: mono audio tracks), depth_db?: -12, attack_ms?: 300, release_ms?: 800, threshold_db?: -45, start?, end?} — writes volume automation that lowers the tracks while anyone speaks",
             always,
             auto_duck
+        ),
+        cmd!(
+            "track.sync_recordings",
+            "Sync Remote Recordings...",
+            ["Track"],
+            None,
+            "{reference?: the track that hears everyone, such as the call recording (default: a track named call, zoom, riverside or reference), tracks?: what to line up (default: the other mono audio tracks), method?: auto|clap, max_offset_s?: 30, drift?: true, clap_window_s?: 60, dry_run?: false} — lines up speaker tracks recorded on separate machines (a double-ender) with the reference and corrects their clock drift",
+            always,
+            sync_recordings
         ),
         cmd!(
             query "session.preflight",
@@ -140,6 +150,83 @@ fn auto_duck(e: &mut Engine, p: &Value) -> Result<Value> {
         lane.enabled = true;
     }
     Ok(json!({"tracks": ducked.iter().map(|t| t.0).collect::<Vec<_>>(), "ducks": held.len()}))
+}
+
+/// The call recording, by its usual names.
+fn reference_track(e: &Engine, id: &str, p: &Value) -> Result<TrackId> {
+    if let Some(t) = track_param(e, id, p, "reference")? {
+        return Ok(t);
+    }
+    e.session()
+        .tracks
+        .iter()
+        .filter(|t| t.kind == soundcraft_model::TrackKind::Audio && !t.clips().is_empty())
+        .find(|t| {
+            let n = t.name.to_lowercase();
+            ["call", "zoom", "riverside", "reference", "ref"].iter().any(|k| n.split(|c: char| !c.is_alphanumeric()).any(|w| w == *k))
+        })
+        .map(|t| t.id)
+        .ok_or_else(|| bad(id, "name the `reference`: the track that hears everyone, such as the call recording"))
+}
+
+fn sync_recordings(e: &mut Engine, p: &Value) -> Result<Value> {
+    let id = "track.sync_recordings";
+    let reference = reference_track(e, id, p)?;
+    let named = if p.get("tracks").is_some() { tracks_param(e, id, p)? } else { speaker_tracks(e.session()) };
+    let tracks: Vec<TrackId> = named.into_iter().filter(|t| *t != reference).collect();
+    if tracks.is_empty() {
+        return Err(bad(id, "nothing to line up: add the speakers' own recordings on their tracks"));
+    }
+    let clap = match str_param(p, "method").unwrap_or("auto") {
+        "auto" => false,
+        "clap" => true,
+        other => return Err(bad(id, format!("unknown method `{other}` (auto or clap)"))),
+    };
+    let s = e.session();
+    let sr = s.sample_rate.as_f64();
+    let mut fits = Vec::new();
+    if clap {
+        let window = s.sample_rate.samples(f64_or(p, "clap_window_s", 60.0).clamp(1.0, 600.0));
+        let at = crate::sync::clap(s, reference, window).ok_or_else(|| bad(id, "no clap found on the reference track"))?;
+        for t in &tracks {
+            let fit = crate::sync::clap(s, *t, window).map(|x| crate::sync::Alignment { offset: (at - x) as f64, drift: 0.0, confidence: 1.0 });
+            fits.push((*t, fit));
+        }
+    } else {
+        let max = s.sample_rate.samples(f64_or(p, "max_offset_s", 30.0).clamp(0.1, 600.0));
+        let drift = bool_or(p, "drift", true);
+        let r = crate::sync::envelope(s, reference);
+        for t in &tracks {
+            let fit = crate::sync::align(&r, &crate::sync::envelope(s, *t), max, drift).filter(|f| f.confidence >= crate::sync::MIN_CONFIDENCE);
+            fits.push((*t, fit));
+        }
+    }
+    let report: Vec<Value> = fits
+        .iter()
+        .map(|(t, fit)| {
+            let name = s.track(*t).map(|tr| tr.name.clone()).unwrap_or_default();
+            match fit {
+                Some(f) => json!({"track": t.0, "name": name, "synced": true, "offset_ms": (f.offset * 1000.0 / sr * 10.0).round() / 10.0,
+                    "drift_ms_per_hour": (f.drift * 3_600_000.0 * 10.0).round() / 10.0, "confidence": (f64::from(f.confidence) * 100.0).round() / 100.0}),
+                None => json!({"track": t.0, "name": name, "synced": false}),
+            }
+        })
+        .collect();
+    let synced = fits.iter().filter(|f| f.1.is_some()).count();
+    let out = json!({"reference": reference.0, "synced": synced, "tracks": report});
+    if synced == 0 {
+        return Err(bad(id, "could not line any track up with the reference: check it holds everyone's voices, or try the clap method"));
+    }
+    if bool_or(p, "dry_run", false) {
+        return Ok(out);
+    }
+    let s = e.session_mut();
+    for (t, fit) in &fits {
+        if let Some(f) = fit {
+            crate::sync::apply(s, *t, f);
+        }
+    }
+    Ok(out)
 }
 
 fn preflight(e: &mut Engine, p: &Value) -> Result<Value> {
@@ -288,5 +375,64 @@ mod tests {
         assert!(kinds.contains(&"dead_air") && kinds.contains(&"silence_end") && kinds.contains(&"loudness"), "{r}");
         assert!(!kinds.contains(&"clipping") && !kinds.contains(&"silence_start"), "{r}");
         assert_eq!(r["ok"], false);
+    }
+    /// Two people talking in turns for `secs` seconds: (speaker A, speaker B) at 48 kHz.
+    fn conversation(secs: usize) -> (Vec<f32>, Vec<f32>) {
+        let sr = 48_000;
+        let (mut a, mut b) = (vec![0.0f32; secs * sr], vec![0.0f32; secs * sr]);
+        let mut seed = 0x2545_f491_u32;
+        let mut rnd = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed as f32 / u32::MAX as f32
+        };
+        let (mut at, mut who) = (0usize, 0);
+        while at < secs * sr {
+            let len = ((1.0 + rnd() * 3.0) * sr as f32) as usize;
+            let rate = 3.0 + rnd() * 3.0;
+            let out = if who == 0 { &mut a } else { &mut b };
+            for (i, v) in out.iter_mut().enumerate().skip(at).take(len) {
+                let syllable = ((i - at) as f32 / sr as f32 * rate * std::f32::consts::PI).sin().abs();
+                *v = (rnd() - 0.5) * 0.6 * syllable;
+            }
+            at += len + (rnd() * 0.4 * sr as f32) as usize;
+            who = 1 - who;
+        }
+        (a, b)
+    }
+
+    #[test]
+    fn sync_recordings_lines_up_offsets_and_drift() {
+        let mut e = Engine::default();
+        let (a, b) = conversation(120);
+        let call: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
+        // The host's recorder started 0.8 s late; the guest's 0.5 s early and runs 200 ppm slow.
+        let host: Vec<f32> = a[38_400..].to_vec();
+        let d = 2e-4;
+        let guest: Vec<f32> = (0..b.len() - 30_000).map(|u| b.get((u as f64 * (1.0 + d)) as usize).copied().unwrap_or(0.0)).collect();
+        let guest: Vec<f32> = std::iter::repeat_n(0.0, 24_000).chain(guest).collect();
+        let s = e.session_mut();
+        for (name, audio) in [("Call", call), ("Host", host), ("Guest", guest)] {
+            let t = s.add_track(TrackKind::Audio, ChannelFormat::Mono, Some(name));
+            let n = audio.len() as i64;
+            let buf = soundcraft_audio_io::AudioBuffer { sample_rate: 48_000, channels: vec![audio] };
+            let src = crate::io::add_source(s, name, buf, None, soundcraft_audio_io::FileFormat::Wav);
+            let clip = soundcraft_model::Clip::audio(s.new_clip_id(), name, src, 0, 0, n);
+            crate::edit::place_clip(s, t, clip);
+        }
+        let r = e.execute("track.sync_recordings", &json!({})).unwrap();
+        let tracks = r["tracks"].as_array().unwrap();
+        let host = &tracks[0];
+        assert_eq!(host["name"], "Host", "{r}");
+        assert!((host["offset_ms"].as_f64().unwrap() - 800.0).abs() < 2.0, "{r}");
+        assert!(host["drift_ms_per_hour"].as_f64().unwrap().abs() < 20.0, "{r}");
+        let guest = &tracks[1];
+        assert!((guest["offset_ms"].as_f64().unwrap() + 500.0).abs() < 3.0, "{r}");
+        assert!((guest["drift_ms_per_hour"].as_f64().unwrap() - 720.0).abs() < 60.0, "{r}");
+        let s = e.session();
+        assert_eq!(s.tracks[1].clips()[0].start, 38_400);
+        let g = &s.tracks[2].clips()[0];
+        assert!(g.start == 0 && (g.stretch - (1.0 + d)).abs() < 2e-5, "{g:?}");
     }
 }

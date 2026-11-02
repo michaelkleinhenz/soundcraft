@@ -9,6 +9,8 @@ use super::{
 
 /// The default colour of an edit marker: a warm red, apart from the yellow chapter markers.
 const EDIT_MARKER: Color32 = Color32::from_rgb(232, 84, 72);
+/// Ad slot markers: green, apart from chapters (yellow) and edit markers (red).
+const AD_MARKER: Color32 = Color32::from_rgb(88, 196, 120);
 
 fn ruler_label(id: &str) -> &'static str {
     match id {
@@ -195,6 +197,19 @@ pub(super) fn draw_rulers(app: &mut SoundApp, ui: &mut Ui, area: Rect, tl: Rect,
                         // An edit marker is a downward triangle, so it reads apart from chapters at a glance.
                         painter.add(Shape::convex_polygon(
                             vec![pos2(x - 6.0, row.min.y + 2.0), pos2(x + 6.0, row.min.y + 2.0), pos2(x, row.max.y - 2.0)],
+                            col,
+                            Stroke::NONE,
+                        ));
+                        painter.text(pos2(x + 8.0, row.center().y), Align2::LEFT_CENTER, &m.name, bold(11.0), col);
+                        continue;
+                    }
+                    if m.kind == soundcraft_model::MarkerKind::Ad {
+                        // An ad slot is a diamond in its own colour.
+                        let col = m.color.map_or(AD_MARKER, rgb);
+                        let (top, bottom) = (row.min.y + 2.0, row.max.y - 2.0);
+                        let mid = (top + bottom) / 2.0;
+                        painter.add(Shape::convex_polygon(
+                            vec![pos2(x, top), pos2(x + 6.0, mid), pos2(x, bottom), pos2(x - 6.0, mid)],
                             col,
                             Stroke::NONE,
                         ));

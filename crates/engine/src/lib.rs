@@ -19,6 +19,7 @@ pub mod io;
 pub mod podcast;
 pub mod preflight;
 pub mod score;
+pub mod sync;
 
 use serde_json::{Value, json};
 use soundcraft_model::{Clip, Session, TrackId, ZoomState};

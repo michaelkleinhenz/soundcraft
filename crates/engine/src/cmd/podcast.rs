@@ -41,6 +41,15 @@ pub fn specs() -> Vec<CommandSpec> {
             |e, p| { add_point_marker(e, p, "edit", "Edit") }
         ),
         cmd!(
+            "markers.add_ad",
+            "Add Ad Slot Marker",
+            ["Edit"],
+            None,
+            "{name?, at?, comments?} — a marker where an ad or sponsor read goes (Insert Segment fills them); not a chapter",
+            always,
+            |e, p| { add_point_marker(e, p, "ad", "Ad") }
+        ),
+        cmd!(
             "track.voice_preset",
             "Voice Preset",
             ["Track", "Voice Preset"],
@@ -87,7 +96,11 @@ fn add_point_marker(e: &mut Engine, p: &Value, kind: &str, prefix: &str) -> Resu
             q[key] = v.clone();
         }
     }
-    let k = if kind == "edit" { soundcraft_model::MarkerKind::Edit } else { soundcraft_model::MarkerKind::Marker };
+    let k = match kind {
+        "edit" => soundcraft_model::MarkerKind::Edit,
+        "ad" => soundcraft_model::MarkerKind::Ad,
+        _ => soundcraft_model::MarkerKind::Marker,
+    };
     let n = e.session().markers.iter().filter(|m| m.kind == k).count() + 1;
     q["name"] = json!(str_param(p, "name").map_or_else(|| format!("{prefix} {n}"), str::to_string));
     super::event::add_marker(e, &q)

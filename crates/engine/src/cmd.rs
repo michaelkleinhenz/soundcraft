@@ -29,6 +29,7 @@ mod podcast;
 mod produce;
 mod query;
 pub(crate) mod sampler;
+mod segments;
 mod setup_more;
 mod strip_silence;
 mod surround;
@@ -166,6 +167,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(strip_silence::specs());
         v.extend(podcast::specs());
         v.extend(produce::specs());
+        v.extend(segments::specs());
         #[cfg(test)]
         v.extend(panic_probe::specs());
         v

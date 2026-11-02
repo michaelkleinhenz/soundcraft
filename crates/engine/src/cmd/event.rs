@@ -151,7 +151,14 @@ fn insert_time(e: &mut Engine, p: &Value) -> Result<Value> {
     if r.is_empty() {
         return Err(bad("event.insert_time", "give `start` and `length` or `end`"));
     }
-    let s = e.session_mut();
+    insert_time_range(e.session_mut(), r, false);
+    Ok(json!({"inserted": r.len()}))
+}
+
+/// Opens `r` on every track (clips, automation), moving later markers and key signatures by its
+/// length. With `keep_markers_at_start`, markers exactly at `r.start` stay there (Insert Segment
+/// fills an ad slot marker without moving it past the ad).
+pub(crate) fn insert_time_range(s: &mut soundcraft_model::Session, r: soundcraft_time::Range, keep_markers_at_start: bool) {
     let ids: Vec<_> = s.tracks.iter().map(|t| t.id).collect();
     for t in ids {
         crate::edit::insert_silence(s, t, r);
@@ -162,7 +169,7 @@ fn insert_time(e: &mut Engine, p: &Value) -> Result<Value> {
         }
     }
     for m in &mut s.markers {
-        if m.start >= r.start {
+        if m.start > r.start || (m.start == r.start && !keep_markers_at_start) {
             m.start += r.len();
             m.end += r.len();
         } else if m.end > r.start {
@@ -174,7 +181,6 @@ fn insert_time(e: &mut Engine, p: &Value) -> Result<Value> {
             *at = at.saturating_add(r.len());
         }
     }
-    Ok(json!({"inserted": r.len()}))
 }
 
 fn cut_time(e: &mut Engine, p: &Value) -> Result<Value> {
@@ -315,6 +321,7 @@ pub(super) fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
         Some("selection") => MarkerKind::Selection,
         Some("none") => MarkerKind::None,
         Some("edit") => MarkerKind::Edit,
+        Some("ad") => MarkerKind::Ad,
         _ => MarkerKind::Marker,
     };
     let (a, b) = match (at, st, en) {
@@ -331,6 +338,7 @@ pub(super) fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     let name = str_param(p, "name").map_or_else(
         || match kind {
             MarkerKind::Edit => format!("Edit {}", s.markers.iter().filter(|m| m.kind == MarkerKind::Edit).count() + 1),
+            MarkerKind::Ad => format!("Ad {}", s.markers.iter().filter(|m| m.kind == MarkerKind::Ad).count() + 1),
             _ => format!("Marker {}", s.markers.len() + 1),
         },
         str::to_string,
@@ -408,7 +416,7 @@ pub(super) fn recall_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     let Some(m) = s.markers.get(i).cloned() else { return Err(bad("markers.recall", "gone")) };
     let s = e.session_mut();
     match m.kind {
-        MarkerKind::Marker | MarkerKind::Edit => s.edit.selection = soundcraft_time::Range::point(m.start),
+        MarkerKind::Marker | MarkerKind::Edit | MarkerKind::Ad => s.edit.selection = soundcraft_time::Range::point(m.start),
         MarkerKind::Selection => s.edit.selection = soundcraft_time::Range::new(m.start, m.end),
         MarkerKind::None => {}
     }

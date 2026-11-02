@@ -840,6 +840,53 @@ pub fn peak_db(ch: &[Vec<f32>]) -> f32 {
     gain_to_db(peak(ch))
 }
 
+/// Where `other` lines up best with `reference`: the lag `k` (within `min_lag..=max_lag`) that
+/// maximises `sum reference[i] * other[i - k]`, refined between samples, and how well they match
+/// there (the normalised correlation, 1 for identical shapes). Both are mean-removed first; `None`
+/// when either is silent or empty. Computed with an FFT, so long signals are fine.
+pub fn best_lag(reference: &[f32], other: &[f32], min_lag: i64, max_lag: i64) -> Option<(f64, f32)> {
+    let clean = |x: &[f32]| -> Vec<f32> {
+        let v: Vec<f32> = x.iter().map(|v| if v.is_finite() { *v } else { 0.0 }).collect();
+        let mean = v.iter().map(|v| f64::from(*v)).sum::<f64>() / v.len().max(1) as f64;
+        v.iter().map(|v| (f64::from(*v) - mean) as f32).collect()
+    };
+    let (a, b) = (clean(reference), clean(other));
+    let energy = |x: &[f32]| x.iter().map(|v| f64::from(*v) * f64::from(*v)).sum::<f64>();
+    let norm = (energy(&a) * energy(&b)).sqrt();
+    if a.is_empty() || b.is_empty() || norm <= 1e-12 || min_lag > max_lag || a.len() + b.len() > MAX_OFFLINE_SAMPLES {
+        return None;
+    }
+    let n = (a.len() + b.len()).next_power_of_two();
+    let mut planner = FftPlanner::<f32>::new();
+    let (fwd, inv) = (planner.plan_fft_forward(n), planner.plan_fft_inverse(n));
+    let spectrum = |x: &[f32]| {
+        let mut buf: Vec<Complex<f32>> = x.iter().map(|v| Complex::new(*v, 0.0)).collect();
+        buf.resize(n, Complex::new(0.0, 0.0));
+        fwd.process(&mut buf);
+        buf
+    };
+    let (fa, fb) = (spectrum(&a), spectrum(&b));
+    let mut c: Vec<Complex<f32>> = fa.iter().zip(&fb).map(|(x, y)| x * y.conj()).collect();
+    inv.process(&mut c);
+    // c[k] (k >= 0) and c[n + k] (k < 0) hold sum a[i] * b[i - k].
+    let at = |k: i64| -> Option<f64> {
+        let len_a = i64::try_from(a.len()).ok()?;
+        let len_b = i64::try_from(b.len()).ok()?;
+        if k >= len_a || -k >= len_b {
+            return None;
+        }
+        let i = if k >= 0 { usize::try_from(k).ok()? } else { n - usize::try_from(-k).ok()? };
+        c.get(i).map(|v| f64::from(v.re) / n as f64)
+    };
+    let (lo, hi) = (min_lag.max(1 - i64::try_from(b.len()).ok()?), max_lag.min(i64::try_from(a.len()).ok()? - 1));
+    let (k, peak) = (lo..=hi).filter_map(|k| at(k).map(|v| (k, v))).max_by(|x, y| x.1.total_cmp(&y.1))?;
+    let frac = match (at(k - 1), at(k + 1)) {
+        (Some(l), Some(r)) if (l - 2.0 * peak + r).abs() > 1e-12 => (0.5 * (l - r) / (l - 2.0 * peak + r)).clamp(-0.5, 0.5),
+        _ => 0.0,
+    };
+    Some((k as f64 + frac, (peak / norm) as f32))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -901,5 +948,18 @@ mod tests {
         let mut all_bad = vec![vec![f32::NAN, f32::INFINITY]];
         remove_dc(&mut all_bad);
         assert!(all_bad[0][0].is_nan() && all_bad[0][1].is_infinite());
+    }
+    #[test]
+    fn best_lag_finds_a_shift_both_ways() {
+        let x: Vec<f32> =
+            (0..4_000).map(|i| ((i as f32 * 0.013).sin() * (i as f32 * 0.0021).cos()).abs() + if i % 397 < 20 { 1.0 } else { 0.0 }).collect();
+        // `other` is `reference` 120 samples earlier: it has to move 120 later.
+        let other: Vec<f32> = x[120..].to_vec();
+        let (lag, score) = best_lag(&x, &other, -500, 500).unwrap();
+        assert!((lag - 120.0).abs() < 0.5 && score > 0.8, "{lag} {score}");
+        let later: Vec<f32> = std::iter::repeat_n(0.0, 75).chain(x.iter().copied()).collect();
+        let (lag, _) = best_lag(&x, &later, -500, 500).unwrap();
+        assert!((lag + 75.0).abs() < 0.5, "{lag}");
+        assert!(best_lag(&x, &[0.0; 100], -5, 5).is_none());
     }
 }

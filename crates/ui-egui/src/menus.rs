@@ -80,6 +80,8 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("window.tighten_pauses", "Tighten Pauses", "", None),
     ("window.auto_duck", "Auto-Duck Music", "", None),
     ("window.preflight", "Episode Pre-flight Check", "", None),
+    ("window.sync_recordings", "Sync Remote Recordings", "", None),
+    ("window.segments", "Insert Segment", "", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -239,7 +241,7 @@ pub fn tree() -> Vec<MenuNode> {
     for (_, name, _) in soundcraft_engine::podcast::VOICE_PRESETS {
         insert_path(&mut roots, &format!("Track > Voice Preset > {name}"));
     }
-    for path in ["Add Chapter Marker", "Add Edit Marker", "Go to Next Edit Marker", "Go to Previous Edit Marker"] {
+    for path in ["Add Chapter Marker", "Add Edit Marker", "Add Ad Slot Marker", "Go to Next Edit Marker", "Go to Previous Edit Marker"] {
         insert_path(&mut roots, &format!("Edit > {path}"));
     }
     if let Some(file) = roots.iter_mut().find(|n| n.label == "File") {
@@ -412,6 +414,8 @@ fn checked_state(app: &SoundApp, path: &str, id: Option<&str>) -> bool {
         Some("window.tighten_pauses") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Pauses),
         Some("window.auto_duck") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Duck),
         Some("window.preflight") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Preflight),
+        Some("window.sync_recordings") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Sync),
+        Some("window.segments") => app.ui.podcast_tools == Some(crate::panels::PodcastTool::Segments),
         Some("window.renderer") => app.extra.show_renderer,
         Some("window.ui_customization") => app.extra.show_ui_customization,
         Some("window.config_auto_update") => app.extra.auto_update_config,
@@ -482,6 +486,8 @@ const MENU_WINDOWS: &[(&str, &str)] = &[
     ("Edit > Tighten Pauses...", "window.tighten_pauses"),
     ("Track > Auto-Duck Music...", "window.auto_duck"),
     ("File > Episode Pre-flight Check...", "window.preflight"),
+    ("Track > Sync Remote Recordings...", "window.sync_recordings"),
+    ("Edit > Insert Segment...", "window.segments"),
     ("Setup > Appearance", "window.ui_customization"),
     ("Setup > Hardware...", "window.playback_engine"),
     ("Setup > Playback Engine...", "window.playback_engine"),
@@ -612,10 +618,12 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
             toggle(&mut app.ui.show_audio_health)
         }
         "window.about" => toggle(&mut app.ui.show_about),
-        "window.tighten_pauses" | "window.auto_duck" | "window.preflight" => {
+        "window.tighten_pauses" | "window.auto_duck" | "window.preflight" | "window.sync_recordings" | "window.segments" => {
             let tool = match id {
                 "window.tighten_pauses" => crate::panels::PodcastTool::Pauses,
                 "window.auto_duck" => crate::panels::PodcastTool::Duck,
+                "window.sync_recordings" => crate::panels::PodcastTool::Sync,
+                "window.segments" => crate::panels::PodcastTool::Segments,
                 _ => crate::panels::PodcastTool::Preflight,
             };
             let on = p.get("value").and_then(Value::as_bool).unwrap_or(app.ui.podcast_tools != Some(tool));

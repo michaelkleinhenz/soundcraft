@@ -10,7 +10,7 @@ mod about;
 mod clips;
 mod episode;
 mod podcast_tools;
-pub use podcast_tools::PodcastTool;
+pub use podcast_tools::{LibrarySegment, PodcastTool};
 mod history;
 mod memory;
 mod plugins;
