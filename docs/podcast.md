@@ -59,9 +59,25 @@ description?, artwork?, explicit?}` (`episode.get` reads it back). The details a
 session, and **Apply** is one undoable step. Cover art is a JPEG or PNG (up to 10 MiB; stores
 want 1400–3000 px square); a relative path is read from the session's folder.
 
+## Chapter and edit markers
+
+Two kinds of marker, each one key in Podcast mode (they work whatever the keyboard focus, and
+take over Commands Focus' M and E there):
+
+| Key | Command | Marker | Use |
+|---|---|---|---|
+| **M** | `markers.add_chapter` (Edit ▸ Add Chapter Marker) | yellow, "Chapter n" | starts a chapter in the exports |
+| **E** | `markers.add_edit {comments?}` (Edit ▸ Add Edit Marker) | red triangle, "Edit n" | flags a spot to fix later (a flub, a cough, a retake) |
+
+Both go at the playhead while playing, else at the insertion point, so you can tap them while
+listening back. Edit ▸ Go to Next / Previous Edit Marker (`markers.next_edit`,
+`markers.previous_edit`) step through the edit markers only; delete one in Window ▸ Memory
+Locations once it's fixed. Edit markers are never chapters. Outside Podcast mode the same keys
+work with Commands Keyboard Focus off, and Enter still adds a plain marker.
+
 ## Chapters
 
-Every marker (or selection memory location) is a chapter: its name is the title, it runs to the
+Every chapter marker (or selection memory location) is a chapter, edit markers aside: its name is the title, it runs to the
 next marker or the end of the export, and the first web address in its comments becomes the
 chapter link. `chapters.list {start?, end?}` shows them.
 

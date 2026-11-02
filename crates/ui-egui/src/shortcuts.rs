@@ -137,6 +137,13 @@ fn fixed(app: &mut SoundApp, key: Key, m: Modifiers, mac: bool) -> bool {
             let _ = app.run("markers.add", json!({}));
             true
         }
+        // Podcast mode: M drops a chapter marker and E an edit marker, whatever the keyboard focus
+        // (they replace Commands Focus' nudge-next and zoom toggle there).
+        Key::M | Key::E if plain && app.ui.podcast_mode => {
+            let id = if key == Key::M { "markers.add_chapter" } else { "markers.add_edit" };
+            let _ = app.run(id, json!({}));
+            true
+        }
         // Shift+=/- step the Grid value and Alt+Shift+=/- the Nudge value; macOS sends Alt+Shift+= as =, not +.
         Key::Plus | Key::Equals | Key::Minus if m.shift && !m.command && !m.ctrl && app.ui.window == MainWindow::Edit => {
             let step = if key == Key::Minus { -1 } else { 1 };

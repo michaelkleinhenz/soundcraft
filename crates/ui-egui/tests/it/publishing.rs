@@ -92,3 +92,25 @@ fn bounce_outside_podcast_mode_stays_wav() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn in_podcast_mode_m_adds_a_chapter_marker_and_e_an_edit_marker() {
+    use soundcraft_model::MarkerKind;
+    let count = |app: &SoundApp, kind: MarkerKind| app.engine.session().markers.iter().filter(|m| m.kind == kind).count();
+    let mut app = SoundApp::new(soundcraft_engine::demo::demo_engine(), None, Services::default());
+    app.ui.podcast_mode = true;
+    let chapters = count(&app, MarkerKind::Marker);
+    let mut h = harness(app);
+    h.run_steps(2);
+    for key in [egui::Key::M, egui::Key::E] {
+        h.key_press(key);
+        h.run_steps(2);
+    }
+    assert_eq!((count(h.state(), MarkerKind::Marker), count(h.state(), MarkerKind::Edit)), (chapters + 1, 1));
+    let names: Vec<&str> = h.state().engine.session().markers.iter().map(|m| m.name.as_str()).collect();
+    assert!(names.contains(&"Edit 1") && names.contains(&format!("Chapter {}", chapters + 1).as_str()), "{names:?}");
+    let tree = podcast::visible_tree(menus::tree(), true);
+    for path in ["Edit > Add Chapter Marker", "Edit > Add Edit Marker", "Edit > Go to Next Edit Marker", "Edit > Go to Previous Edit Marker"] {
+        assert!(has(&tree, path), "{path} missing");
+    }
+}

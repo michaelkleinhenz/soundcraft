@@ -32,6 +32,9 @@ pub(crate) fn memory_locations(app: &mut SoundApp, ui: &mut Ui) {
         if ui.button("+ Selection").clicked() {
             let _ = app.run("markers.add", json!({"kind": "selection"}));
         }
+        if ui.button("+ Edit").on_hover_text("Add Edit Marker: a spot that still needs an edit (E)").clicked() {
+            let _ = app.run("markers.add_edit", json!({}));
+        }
     });
     let rows: Vec<(u32, String, String, String, String)> = {
         let s = app.engine.session();
@@ -42,6 +45,7 @@ pub(crate) fn memory_locations(app: &mut SoundApp, ui: &mut Ui) {
                 let kind = match m.kind {
                     soundcraft_model::MarkerKind::Marker => "marker",
                     soundcraft_model::MarkerKind::Selection => "selection",
+                    soundcraft_model::MarkerKind::Edit => "edit",
                     soundcraft_model::MarkerKind::None => "none",
                 };
                 let len = if m.kind == soundcraft_model::MarkerKind::Selection { f(m.end - m.start) } else { String::new() };

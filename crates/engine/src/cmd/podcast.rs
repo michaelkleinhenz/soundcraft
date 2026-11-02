@@ -22,8 +22,54 @@ pub fn specs() -> Vec<CommandSpec> {
             let s = e.session();
             Ok(json!({"start": r.start, "end": r.end, "chapters": crate::podcast::chapters_json(s, &chapters)["chapters"], "text": crate::podcast::chapters_text(s, &chapters)}))
         }),
+        cmd!(
+            "markers.add_chapter",
+            "Add Chapter Marker",
+            ["Edit"],
+            Some("M"),
+            "{name?, at?} — a marker that starts a chapter, at the playhead while playing, else the insertion point",
+            always,
+            |e, p| { add_point_marker(e, p, "marker", "Chapter") }
+        ),
+        cmd!(
+            "markers.add_edit",
+            "Add Edit Marker",
+            ["Edit"],
+            Some("E"),
+            "{name?, at?, comments?} — a marker for a spot that still needs an edit; not a chapter",
+            always,
+            |e, p| { add_point_marker(e, p, "edit", "Edit") }
+        ),
+        cmd!(noundo "markers.next_edit", "Go to Next Edit Marker", ["Edit"], None, "{}", always, |e, _| step_edit_marker(e, true)),
+        cmd!(noundo "markers.previous_edit", "Go to Previous Edit Marker", ["Edit"], None, "{}", always, |e, _| step_edit_marker(e, false)),
         cmd!(noundo "file.export_chapters", "Chapters...", ["File", "Export"], None, "{path, format?: json|txt (from the extension), start?, end?, replace?: false} — Podcasting 2.0 chapters JSON or show-notes text", always, export_chapters),
     ]
+}
+
+/// A point marker of `kind` named "`prefix` n" (n counts that kind) unless `name` is given.
+fn add_point_marker(e: &mut Engine, p: &Value, kind: &str, prefix: &str) -> Result<Value> {
+    let mut q = json!({"kind": kind});
+    for key in ["at", "comments"] {
+        if let Some(v) = p.get(key) {
+            q[key] = v.clone();
+        }
+    }
+    let k = if kind == "edit" { soundcraft_model::MarkerKind::Edit } else { soundcraft_model::MarkerKind::Marker };
+    let n = e.session().markers.iter().filter(|m| m.kind == k).count() + 1;
+    q["name"] = json!(str_param(p, "name").map_or_else(|| format!("{prefix} {n}"), str::to_string));
+    super::event::add_marker(e, &q)
+}
+
+/// Locates to the next (or previous) edit marker after (or before) the insertion point.
+fn step_edit_marker(e: &mut Engine, forward: bool) -> Result<Value> {
+    let cur = e.session().edit.selection.start;
+    let edits = e.session().markers.iter().filter(|m| m.kind == soundcraft_model::MarkerKind::Edit).map(|m| (m.number, m.start));
+    let target =
+        if forward { edits.filter(|(_, t)| *t > cur).min_by_key(|(_, t)| *t) } else { edits.filter(|(_, t)| *t < cur).max_by_key(|(_, t)| *t) };
+    match target {
+        Some((number, _)) => super::event::recall_marker(e, &json!({"number": number})),
+        None => Ok(json!({"moved": false})),
+    }
 }
 
 /// The range an export covers: `start`/`end`, else the edit selection, else the whole session.
@@ -102,6 +148,36 @@ fn set_episode(e: &mut Engine, p: &Value) -> Result<Value> {
 mod tests {
     use crate::Engine;
     use serde_json::json;
+
+    #[test]
+    fn chapter_and_edit_markers_are_two_kinds_and_only_chapters_export() {
+        use soundcraft_model::MarkerKind;
+        let mut e = Engine::default();
+        e.execute("markers.add_chapter", &json!({"at": 0})).unwrap();
+        e.execute("markers.add_edit", &json!({"at": 48_000, "comments": "cough"})).unwrap();
+        e.execute("markers.add_chapter", &json!({"at": 96_000})).unwrap();
+        e.execute("markers.add_edit", &json!({"at": 144_000})).unwrap();
+        let s = e.session();
+        let named: Vec<(&str, MarkerKind)> = s.markers.iter().map(|m| (m.name.as_str(), m.kind)).collect();
+        assert_eq!(
+            named,
+            [("Chapter 1", MarkerKind::Marker), ("Edit 1", MarkerKind::Edit), ("Chapter 2", MarkerKind::Marker), ("Edit 2", MarkerKind::Edit)]
+        );
+        assert_eq!(s.markers[1].comments, "cough");
+        let chapters = e.execute("chapters.list", &json!({"start": 0, "end": 192_000})).unwrap();
+        let titles: Vec<&str> = chapters["chapters"].as_array().unwrap().iter().filter_map(|c| c["title"].as_str()).collect();
+        assert_eq!(titles, ["Chapter 1", "Chapter 2"], "edit markers are not chapters");
+        // Next/previous edit marker skip the chapters.
+        e.execute("transport.locate", &json!({"at": 0})).unwrap();
+        e.execute("edit.select", &json!({"start": 0, "end": 0})).unwrap();
+        assert_eq!(e.execute("markers.next_edit", &json!({})).unwrap()["at"], 48_000);
+        assert_eq!(e.execute("markers.next_edit", &json!({})).unwrap()["at"], 144_000);
+        assert_eq!(e.execute("markers.next_edit", &json!({})).unwrap()["moved"], false);
+        assert_eq!(e.execute("markers.previous_edit", &json!({})).unwrap()["at"], 48_000);
+        // Undoable like any marker.
+        e.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(e.session().markers.len(), 3);
+    }
 
     #[test]
     fn episode_details_are_set_field_by_field_and_undo() {

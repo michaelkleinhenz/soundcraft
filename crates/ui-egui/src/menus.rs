@@ -225,6 +225,9 @@ pub fn tree() -> Vec<MenuNode> {
     // PodCraft's publishing items (not in the incumbent catalog): episode details next to Get Info,
     // and chapters among the exports.
     insert_path(&mut roots, "File > Export > Chapters...");
+    for path in ["Add Chapter Marker", "Add Edit Marker", "Go to Next Edit Marker", "Go to Previous Edit Marker"] {
+        insert_path(&mut roots, &format!("Edit > {path}"));
+    }
     if let Some(file) = roots.iter_mut().find(|n| n.label == "File") {
         let at = file.children.iter().position(|n| n.label == "Get Info...").map_or(file.children.len(), |i| i + 1);
         file.children.insert(at, MenuNode { label: "Episode Info...".into(), path: "File > Episode Info...".into(), children: Vec::new() });
