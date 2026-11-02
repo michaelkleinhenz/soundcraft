@@ -17,6 +17,18 @@ It hides, from the menus, the toolbar, the rulers and the New Tracks dialog:
 - **Video and post-production:** video windows and import, timecode and feet+frames, AAF/OMF and
   Media Composer export, sync offsets.
 - **Surround:** every track width other than mono and stereo, object views and Atmos automation.
+- **Music effects:** pitch, time shift, modulation and delay, lo-fi, rectifier, subharmonic,
+  amp sims, the plate reverb, the signal generator and time compression/expansion, from the insert
+  menus and AudioSuite. EQ, dynamics, the channel strip, the room reverb, gain, trim, DC removal,
+  dither, the saturator and third-party plugins stay.
+- **Studio and console extras:** VCA tracks, routing folders, Freeze/Commit, insert bypass by
+  category, playlists, Narrow Mix, workspaces, window configurations, Task Manager, peripherals,
+  disk allocation, collaboration, sign-in and the dashboard.
+
+The Edit window is simpler too: the toolbar offers Shuffle and Slip (Spot and Grid stay on F3 and
+F4) and the Trim, Selector, Grabber and Zoom tools (Scrubber and Pencil stay on F9 and F10), and
+an empty session shows a **Start an episode** card with New Episode…, Import Recordings… and Open
+Session…. Speaker tracks from the template are Large, so speech waveforms are easy to read.
 
 Nothing is unregistered: shortcuts, the CLI, the control channel and MCP still run every command.
 The list lives in `crates/ui-egui/src/podcast.rs`; a test checks that every hidden path is a real

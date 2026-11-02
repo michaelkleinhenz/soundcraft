@@ -85,7 +85,74 @@ pub const HIDDEN_MENU_PATHS: &[&str] = &[
     "Edit > Automation > Duplicate Pan Automation to Dolby Atmos Plugin Automation",
     "View > Edit Window Views > Object",
     "View > Mix Window Views > Object",
+    // Music effects (A5): pitch, modulation, lo-fi distortion, signal generation, time stretch.
+    "AudioSuite > Pitch Shift",
+    "AudioSuite > Modulation",
+    "AudioSuite > Delay",
+    "AudioSuite > Harmonic > Lo-Fi",
+    "AudioSuite > Harmonic > Recti-Fi",
+    "AudioSuite > Harmonic > SansAmp PSA-1",
+    "AudioSuite > Harmonic > Eleven Lite",
+    "AudioSuite > Other > Signal Generator",
+    "AudioSuite > Other > Time Compression Expansion",
+    // Studio and console extras (A6).
+    "Track > Convert Aux to Routing Folder",
+    "Track > Freeze",
+    "Track > Commit...",
+    "Track > Bypass Inserts",
+    "Track > Coalesce VCA Controller Automation",
+    "Track > Designate as Target Playlist",
+    "Track > Show Target Playlist",
+    "Track > Toggle Recent Playlist",
+    "Edit > Copy Selection to...",
+    "Edit > Move Selection to...",
+    "View > Automation > Trim Playlist",
+    "View > Automation > Composite Playlist",
+    "View > Narrow Mix",
+    "View > Other Displays > Universe",
+    "File > Open > Project...",
+    "File > Open > Sketch...",
+    "File > Dashboard...",
+    "File > Start Collaboration...",
+    "File > Sign In",
+    "File > Import > Clip Groups...",
+    "Setup > Disk Allocation...",
+    "Setup > Peripherals...",
+    "Window > Configurations",
+    "Window > Sketch to Front",
+    "Window > ARA Plugins",
+    "Window > Splice",
+    "Window > SoundFlow",
+    "Window > Task Manager",
+    "Window > New Workspace",
+    "Window > Workspaces",
+    "Window > Machine Track Arming",
+    "Window > Collaboration",
 ];
+
+/// Built-in plugins the insert menus leave out in Podcast mode (A5): music effects. EQ, dynamics,
+/// the channel strip, one reverb, gain, trim, DC removal, dither, the saturator and third-party
+/// plugins stay.
+const HIDDEN_PLUGINS: &[&str] = &[
+    "pitch_shifter",
+    "time_shift",
+    "plate_reverb",
+    "lofi",
+    "rectifier",
+    "subharmonic",
+    "signal_generator",
+    "mod_delay",
+    "chorus",
+    "flanger",
+    "phaser",
+    "ring_mod",
+    "auto_pan",
+];
+
+/// Whether the insert menus offer the built-in plugin `id` (`on`: Podcast mode).
+pub fn offers_plugin(on: bool, id: &str) -> bool {
+    !on || !HIDDEN_PLUGINS.contains(&id)
+}
 
 /// Edit window rulers hidden in Podcast mode (music timing and picture timebases).
 const HIDDEN_RULERS: &[&str] = &["bars_beats", "tempo", "tempo_editor", "meter", "key", "chords", "timecode", "timecode2", "feet_frames"];
@@ -114,7 +181,7 @@ pub fn hides_path(path: &str) -> bool {
 
 /// Whether the New Tracks dialog offers this track kind in Podcast mode.
 pub fn offers_track_kind(kind: TrackKind) -> bool {
-    !matches!(kind, TrackKind::Midi | TrackKind::Instrument | TrackKind::Video)
+    !matches!(kind, TrackKind::Midi | TrackKind::Instrument | TrackKind::Video | TrackKind::Vca)
 }
 
 /// Whether the New Tracks dialog offers this channel format in Podcast mode.
@@ -177,4 +244,39 @@ pub fn command(app: &mut SoundApp, p: &Value) -> Value {
     let on = p.get("value").and_then(Value::as_bool).unwrap_or(!app.ui.podcast_mode);
     set(app, on);
     json!({"podcast_mode": on})
+}
+
+/// The Edit window of an empty session in Podcast mode: a card that starts an episode (the New
+/// Episode template), opens a session or imports recordings.
+pub fn welcome(app: &mut SoundApp, ui: &mut egui::Ui, area: egui::Rect) {
+    let t = crate::theme::Tokens::current();
+    let card = egui::Rect::from_center_size(area.center(), egui::vec2(360.0, 200.0).min(area.size()));
+    if card.width() < 120.0 || card.height() < 80.0 {
+        return;
+    }
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(card));
+    egui::Frame::new().fill(t.panel_bg).stroke(egui::Stroke::new(1.0, t.counter_border)).corner_radius(8).inner_margin(16).show(&mut child, |ui| {
+        ui.set_min_size(card.size() - egui::vec2(32.0, 32.0));
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new("Start an episode").size(18.0).strong());
+            ui.label(egui::RichText::new("Speaker tracks with a voice chain, music and SFX, a mastered mix.").small().color(t.text_dim));
+            ui.add_space(10.0);
+            let mut pick = None;
+            if ui.add(egui::Button::new("New Episode…").min_size(egui::vec2(180.0, 26.0))).clicked() {
+                pick = Some("session.new");
+            }
+            if ui.add(egui::Button::new("Import Recordings…").min_size(egui::vec2(180.0, 22.0))).clicked() {
+                pick = Some("file.import_audio");
+            }
+            if ui.add(egui::Button::new("Open Session…").min_size(egui::vec2(180.0, 22.0))).clicked() {
+                pick = Some("session.open");
+            }
+            if let Some(id) = pick
+                && !crate::menus::invoke_shortcut_dialog(app, id)
+                && let Err(e) = app.run(id, json!({}))
+            {
+                app.ui.status = e;
+            }
+        });
+    });
 }

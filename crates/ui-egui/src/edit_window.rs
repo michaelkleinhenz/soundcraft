@@ -186,6 +186,9 @@ fn main_area_content(app: &mut SoundApp, ui: &mut Ui) {
         }
     }
     overlay(app, ui, tl, Rect::from_min_max(pos2(tl.min.x, rulers_rect.min.y), tl.max));
+    if app.ui.podcast_mode && app.engine.session().tracks.is_empty() {
+        crate::podcast::welcome(app, ui, tl);
+    }
     let _ = header;
     // Horizontal scrollbar.
     let sb = Rect::from_min_max(pos2(tl.min.x, full.max.y - hscroll_h), pos2(tl.max.x, full.max.y));

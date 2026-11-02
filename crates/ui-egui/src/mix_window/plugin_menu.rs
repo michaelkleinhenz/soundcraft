@@ -4,8 +4,9 @@ use super::{Color32, Rect, SoundApp, TrackId, Ui, json, pos2, vec2};
 /// Bypass and removal and the plugins by category and format.
 pub fn plugin_menu(app: &mut SoundApp, ui: &mut Ui, id: TrackId, slot: usize, occupied: bool) {
     let search = MenuSearch::show(ui, egui::Id::unique(("plugin-search", id.0, slot)), "Search plugins…");
+    let podcast = app.ui.podcast_mode;
     if search.typing() {
-        if let Some(plugin) = plugin_search(ui, &search, false) {
+        if let Some(plugin) = plugin_search(ui, &search, false, podcast) {
             pick_insert(app, ui, id, slot, &plugin);
         }
         return;
@@ -20,14 +21,15 @@ pub fn plugin_menu(app: &mut SoundApp, ui: &mut Ui, id: TrackId, slot: usize, oc
         ui.separator();
     }
     let mut cats: Vec<soundcraft_dsp::Category> = Vec::new();
-    for p in soundcraft_dsp::plugins() {
+    for p in soundcraft_dsp::plugins().iter().filter(|p| crate::podcast::offers_plugin(podcast, p.id)) {
         if !p.is_instrument && !cats.contains(&p.category) {
             cats.push(p.category);
         }
     }
     for c in cats {
         ui.menu_button(format!("{c:?}"), |ui| {
-            for p in soundcraft_dsp::plugins().iter().filter(|p| p.category == c && !p.is_instrument) {
+            for p in soundcraft_dsp::plugins().iter().filter(|p| p.category == c && !p.is_instrument && crate::podcast::offers_plugin(podcast, p.id))
+            {
                 if ui.button(p.name).clicked() {
                     pick_insert(app, ui, id, slot, p.id);
                 }
@@ -46,7 +48,7 @@ pub fn instrument_menu(app: &mut SoundApp, ui: &mut Ui, id: TrackId) {
     let slot = soundcraft_mix::INSTRUMENT_SLOT;
     let search = MenuSearch::show(ui, egui::Id::unique(("instrument-search", id.0)), "Search instruments…");
     if search.typing() {
-        if let Some(plugin) = plugin_search(ui, &search, true) {
+        if let Some(plugin) = plugin_search(ui, &search, true, false) {
             run_pick(app, ui, "mix.instrument", json!({"track": id.0, "plugin": plugin}));
         }
         return;
@@ -114,9 +116,12 @@ fn run_pick(app: &mut SoundApp, ui: &Ui, cmd: &str, params: serde_json::Value) {
 /// The plugins whose name or vendor holds the search text: the built-in ones, then Audio Units
 /// (listing them creates no instances) and whichever of CLAP and VST3 have been scanned, with a
 /// button to scan each of the others. Returns the id picked.
-fn plugin_search(ui: &mut Ui, search: &MenuSearch, instruments: bool) -> Option<String> {
-    let mut built_in: Vec<&soundcraft_dsp::PluginInfo> =
-        soundcraft_dsp::plugins().iter().copied().filter(|p| p.is_instrument == instruments && search.matches(p.name)).collect();
+fn plugin_search(ui: &mut Ui, search: &MenuSearch, instruments: bool, podcast: bool) -> Option<String> {
+    let mut built_in: Vec<&soundcraft_dsp::PluginInfo> = soundcraft_dsp::plugins()
+        .iter()
+        .copied()
+        .filter(|p| p.is_instrument == instruments && search.matches(p.name) && crate::podcast::offers_plugin(podcast, p.id))
+        .collect();
     built_in.sort_by_cached_key(|p| p.name.to_lowercase());
     let (clap, vst3) = (soundcraft_clap_host::cached(), soundcraft_vst3_host::cached());
     let mut hosted: Vec<(MenuPlugin, &str)> = Vec::new();

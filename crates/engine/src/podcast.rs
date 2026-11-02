@@ -69,6 +69,8 @@ pub fn episode_session(name: &str, sample_rate: SampleRate, speakers: &[String])
         first.get_or_insert(t);
         if let Some(tr) = s.track_mut(t) {
             tr.mixer.output = Route::Bus(voices_bus);
+            // Taller than the default, so speech waveforms are easy to read and cut.
+            tr.height = soundcraft_model::TrackHeight::Large;
             tr.color = soundcraft_model::TRACK_COLORS[(2 + i) % soundcraft_model::TRACK_COLORS.len()];
             for (slot, ins) in tr.mixer.inserts.iter_mut().zip(voice_chain()) {
                 *slot = Some(ins);
