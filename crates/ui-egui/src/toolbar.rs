@@ -176,7 +176,9 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
             ui.spacing_mut().item_spacing = vec2(2.0, 3.0);
             let row = ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                if icon_button(ui, vec2(36.0, 26.0), "zoom_toggle", app.engine.session().edit.zoom_toggle.is_some(), "Zoom Toggle (E)").clicked() {
+                // In Podcast mode E adds an edit marker instead.
+                let tip = if app.ui.podcast_mode { "Zoom Toggle" } else { "Zoom Toggle (E)" };
+                if icon_button(ui, vec2(36.0, 26.0), "zoom_toggle", app.engine.session().edit.zoom_toggle.is_some(), tip).clicked() {
                     crate::edit_window::zoom_toggle(app);
                 }
                 for (tool, icon) in [
