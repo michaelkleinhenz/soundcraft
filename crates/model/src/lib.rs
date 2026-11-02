@@ -8,6 +8,7 @@
 mod automation;
 pub mod b64;
 mod clip;
+mod episode;
 mod ids;
 mod markers;
 mod mixer;
@@ -17,6 +18,7 @@ mod track;
 
 pub use automation::{AutoParam, AutomationLane, AutomationMode, AutomationPoint};
 pub use clip::{Clip, ClipContent, Fade, FadeShape};
+pub use episode::{EpisodeInfo, MAX_EPISODE_TEXT};
 pub use ids::{BusId, ClipId, GroupId, MarkerId, SourceId, TrackId};
 pub use markers::{Group, MarkerKind, MemoryLocation};
 pub use mixer::{

@@ -251,3 +251,64 @@ fn loudness_target_gain_handles_silence_and_both_limits() {
     assert_eq!(t.gain_db(-10.0, -1.0), -6.0, "too loud comes down");
     assert_eq!(soundcraft_engine::io::LoudnessTarget::preset("PODCAST_MONO").map(|t| t.lufs), Some(-19.0));
 }
+
+#[test]
+fn mp3_bounces_carry_the_episode_tag_chapters_and_loudness() {
+    let (mut e, frames) = tone_session(0.05, 3.0);
+    let dir = scratch("bounce-mp3");
+    // A tiny JPEG signature is enough for the tag; players only need the bytes.
+    let art = dir.join("cover.jpg");
+    std::fs::write(&art, [0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10]).unwrap();
+    e.execute("episode.set", &serde_json::json!({"title": "Pilot", "show": "The Show", "episode": 1, "artwork": art})).unwrap();
+    let s = e.session_mut();
+    s.add_marker("Intro", soundcraft_model::MarkerKind::Marker, 0, 0);
+    s.add_marker("Main", soundcraft_model::MarkerKind::Marker, 48_000, 48_000);
+    let path = dir.join("Pilot.mp3");
+    let result =
+        e.execute("file.bounce_mix", &serde_json::json!({"path": path, "loudness": "podcast", "bitrate": 96, "start": 0, "end": frames})).unwrap();
+    assert!((result["lufs"].as_f64().unwrap() + 16.0).abs() < 0.2, "{result}");
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"ID3\x03"));
+    for needle in [&b"TIT2"[..], b"TALB", b"APIC", b"CTOC", b"CHAP", b"chp1"] {
+        assert!(bytes.windows(needle.len()).any(|w| w == needle), "{}", String::from_utf8_lossy(needle));
+    }
+    let (info, audio) = soundcraft_audio_io::decode(&bytes, Some("mp3")).unwrap();
+    assert_eq!(info.format, FileFormat::Mp3);
+    assert_eq!(audio.frames() as i64, frames, "gapless: the exact length comes back");
+    assert!(!dir.join("Pilot.mp3.part").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn mp3_bounces_refuse_what_mp3_cannot_hold() {
+    let (mut e, frames) = tone_session(0.05, 1.0);
+    let dir = scratch("bounce-mp3-refused");
+    let err = e.execute("file.bounce_mix", &serde_json::json!({"path": dir.join("x.mp3"), "bitrate": 999, "end": frames})).unwrap_err();
+    assert!(err.to_string().contains("bitrate"), "{err}");
+    let mut hi = soundcraft_engine::Engine::default();
+    hi.execute("session.new", &serde_json::json!({"sample_rate": 96_000})).unwrap();
+    hi.execute("track.new", &serde_json::json!({})).unwrap();
+    let err = hi.execute("file.bounce_mix", &serde_json::json!({"path": dir.join("y.mp3"), "end": 96_000})).unwrap_err();
+    assert!(err.to_string().contains("96000 Hz"), "{err}");
+    assert!(!dir.join("y.mp3").exists() && !dir.join("y.mp3.part").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn flac_bounces_carry_the_episode_comments_chapters_and_cover() {
+    let (mut e, frames) = tone_session(0.05, 2.0);
+    let dir = scratch("bounce-flac-tags");
+    let art = dir.join("cover.png");
+    std::fs::write(&art, [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n', 0, 0]).unwrap();
+    e.execute("episode.set", &serde_json::json!({"title": "Pilot", "show": "The Show", "season": 2, "artwork": art})).unwrap();
+    e.session_mut().add_marker("Main", soundcraft_model::MarkerKind::Marker, 24_000, 24_000);
+    let path = dir.join("Pilot.flac");
+    e.execute("file.bounce_mix", &serde_json::json!({"path": path, "bit_depth": 16, "start": 0, "end": frames})).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    for needle in ["TITLE=Pilot", "ALBUM=The Show", "DISCNUMBER=2", "GENRE=Podcast", "CHAPTER001=00:00:00.500", "CHAPTER001NAME=Main", "image/png"] {
+        assert!(bytes.windows(needle.len()).any(|w| w == needle.as_bytes()), "{needle}");
+    }
+    let (info, audio) = soundcraft_audio_io::decode(&bytes, Some("flac")).unwrap();
+    assert_eq!((info.format, audio.frames() as i64), (FileFormat::Flac, frames));
+    let _ = std::fs::remove_dir_all(&dir);
+}

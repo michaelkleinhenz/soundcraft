@@ -89,7 +89,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "New Memory Location",
             [],
             Some("Enter"),
-            "{name?, at?, start?, end?, kind?: marker|selection|none, ruler?: 1..5}",
+            "{name?, at?, start?, end?, kind?: marker|selection|edit|none, ruler?: 1..5, comments?}",
             always,
             add_marker
         ),
@@ -306,7 +306,7 @@ fn add_note(e: &mut Engine, p: &Value) -> Result<Value> {
     }
 }
 
-fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
+pub(super) fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     let sel = e.session().edit.selection;
     let at = position_param(e, "markers.add", p, "at")?;
     let st = position_param(e, "markers.add", p, "start")?;
@@ -314,6 +314,7 @@ fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     let kind = match str_param(p, "kind") {
         Some("selection") => MarkerKind::Selection,
         Some("none") => MarkerKind::None,
+        Some("edit") => MarkerKind::Edit,
         _ => MarkerKind::Marker,
     };
     let (a, b) = match (at, st, en) {
@@ -327,11 +328,19 @@ fn add_marker(e: &mut Engine, p: &Value) -> Result<Value> {
         }
     };
     let s = e.session_mut();
-    let n = s.markers.len() + 1;
-    let name = str_param(p, "name").map_or_else(|| format!("Marker {n}"), str::to_string);
+    let name = str_param(p, "name").map_or_else(
+        || match kind {
+            MarkerKind::Edit => format!("Edit {}", s.markers.iter().filter(|m| m.kind == MarkerKind::Edit).count() + 1),
+            _ => format!("Marker {}", s.markers.len() + 1),
+        },
+        str::to_string,
+    );
     let id = s.add_marker(&name, kind, a.max(0), b.max(a).max(0));
     if let Some(m) = s.markers.iter_mut().find(|m| m.id == id) {
         m.ruler = i64_or(p, "ruler", 1).clamp(1, 5) as u8;
+        if let Some(c) = str_param(p, "comments") {
+            m.comments = c.to_string();
+        }
     }
     let number = s.marker(id).map_or(0, |m| m.number);
     Ok(json!({"id": id, "number": number}))
@@ -393,13 +402,13 @@ fn edit_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     Ok(json!({}))
 }
 
-fn recall_marker(e: &mut Engine, p: &Value) -> Result<Value> {
+pub(super) fn recall_marker(e: &mut Engine, p: &Value) -> Result<Value> {
     let i = marker_index(e, p, "markers.recall")?;
     let s = e.session();
     let Some(m) = s.markers.get(i).cloned() else { return Err(bad("markers.recall", "gone")) };
     let s = e.session_mut();
     match m.kind {
-        MarkerKind::Marker => s.edit.selection = soundcraft_time::Range::point(m.start),
+        MarkerKind::Marker | MarkerKind::Edit => s.edit.selection = soundcraft_time::Range::point(m.start),
         MarkerKind::Selection => s.edit.selection = soundcraft_time::Range::new(m.start, m.end),
         MarkerKind::None => {}
     }

@@ -10,6 +10,9 @@ pub enum MarkerKind {
     Marker,
     /// A stored selection range.
     Selection,
+    /// A point that flags a place still needing an edit (a flub, a cough, a retake). Not a
+    /// chapter: exports leave these out.
+    Edit,
     /// A location that only recalls view settings.
     None,
 }

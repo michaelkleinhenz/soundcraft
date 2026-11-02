@@ -359,6 +359,9 @@ pub struct Session {
     pub next_id: u64,
     #[serde(default)]
     pub comments: String,
+    /// The podcast episode this session produces (title, show, artwork...).
+    #[serde(default)]
+    pub episode: crate::EpisodeInfo,
     /// Original MIDI performances keyed by clip id (Event › MIDI Operations › Restore/Flatten
     /// Performance). Independent of undo so a restore survives later edits.
     #[serde(default)]
@@ -400,6 +403,7 @@ impl Session {
             edit: EditState::default(),
             next_id: 1,
             comments: String::new(),
+            episode: crate::EpisodeInfo::default(),
             midi_originals: std::collections::BTreeMap::new(),
             pool: SourcePool::default(),
             folder: None,

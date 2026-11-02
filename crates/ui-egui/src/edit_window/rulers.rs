@@ -7,6 +7,9 @@ use super::{
 
 // ---- rulers ----------------------------------------------------------------------------------
 
+/// The default colour of an edit marker: a warm red, apart from the yellow chapter markers.
+const EDIT_MARKER: Color32 = Color32::from_rgb(232, 84, 72);
+
 fn ruler_label(id: &str) -> &'static str {
     match id {
         "bars_beats" => "Bars|Beats",
@@ -186,7 +189,18 @@ pub(super) fn draw_rulers(app: &mut SoundApp, ui: &mut Ui, area: Rect, tl: Rect,
                 painter.rect_filled(row, 0.0, if id == "chords" { Color32::from_rgb(40, 56, 60) } else { t.marker_ruler });
                 for m in s.markers.iter().filter(|m| m.ruler == lane || (lane == 1 && m.ruler == 0)) {
                     let x = x_of(&s, tl, m.start);
-                    let col = m.color.map_or(Color32::from_rgb(232, 200, 64), rgb);
+                    let edit = m.kind == soundcraft_model::MarkerKind::Edit;
+                    let col = m.color.map_or(if edit { EDIT_MARKER } else { Color32::from_rgb(232, 200, 64) }, rgb);
+                    if edit {
+                        // An edit marker is a downward triangle, so it reads apart from chapters at a glance.
+                        painter.add(Shape::convex_polygon(
+                            vec![pos2(x - 6.0, row.min.y + 2.0), pos2(x + 6.0, row.min.y + 2.0), pos2(x, row.max.y - 2.0)],
+                            col,
+                            Stroke::NONE,
+                        ));
+                        painter.text(pos2(x + 8.0, row.center().y), Align2::LEFT_CENTER, &m.name, bold(11.0), col);
+                        continue;
+                    }
                     if m.kind == soundcraft_model::MarkerKind::Selection {
                         let x1 = x_of(&s, tl, m.end);
                         painter.rect_filled(Rect::from_min_max(pos2(x, row.min.y + 3.0), pos2(x1, row.max.y - 3.0)), 2.0, col.gamma_multiply(0.5));

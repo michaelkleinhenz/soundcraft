@@ -45,8 +45,8 @@ pub enum Dialog {
         template: Option<String>,
         speakers: String,
     },
-    /// `loudness`: a loudness preset id or "off"; `None` until shown, then the podcast preset in
-    /// Podcast mode and off outside it.
+    /// `loudness`: a loudness preset id or "off"; `None` until shown, then (with the format) the
+    /// podcast preset and MP3 in Podcast mode, off and WAV outside it. `bitrate`: MP3 kbps.
     Bounce {
         path: String,
         format: FileFormat,
@@ -54,6 +54,7 @@ pub enum Dialog {
         normalize: bool,
         dither: bool,
         loudness: Option<String>,
+        bitrate: u32,
     },
     RenameTrack {
         id: TrackId,
@@ -269,6 +270,7 @@ impl Dialogs {
                     normalize: false,
                     dither: false,
                     loudness: None,
+                    bitrate: soundcraft_audio_io::mp3::DEFAULT_BITRATE,
                 }
             }
             "file.import_audio" => Dialog::PathPrompt { cmd: id.into(), title: "Import Audio".into(), path: home, key: "path".into() },
@@ -434,7 +436,7 @@ fn bounce_file_row(app: &mut SoundApp, ui: &mut egui::Ui, path: &mut String, for
             match unicode(&p) {
                 Ok(text) => {
                     *path = text.to_owned();
-                    if let Some(picked) = p.extension().and_then(std::ffi::OsStr::to_str).and_then(FileFormat::from_write_extension) {
+                    if let Some(picked) = p.extension().and_then(std::ffi::OsStr::to_str).and_then(FileFormat::from_export_extension) {
                         *format = picked;
                     }
                 }
@@ -630,21 +632,41 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                             Some(("session.new".into(), json!({"name": name, "sample_rate": sample_rate, "template": template, "speakers": names})));
                     }
                 }
-                Dialog::Bounce { path, format, bit_depth, normalize, dither, loudness } => {
+                Dialog::Bounce { path, format, bit_depth, normalize, dither, loudness, bitrate } => {
+                    if loudness.is_none() && app.ui.podcast_mode {
+                        *format = FileFormat::Mp3;
+                        *path = std::path::Path::new(path.as_str()).with_extension("mp3").to_string_lossy().into_owned();
+                    }
                     let loudness = loudness.get_or_insert_with(|| if app.ui.podcast_mode { "podcast".into() } else { "off".into() });
                     bounce_file_row(app, ui, path, format);
+                    let mp3 = *format == FileFormat::Mp3;
                     ui.horizontal(|ui| {
                         craft_ui::ComboBox::from_label("Format").selected_text(format.name()).show_ui(ui, |ui| {
-                            for &f in FileFormat::WRITE {
+                            for &f in FileFormat::EXPORT {
                                 ui.selectable_value(format, f, f.name());
                             }
                         });
-                        craft_ui::ComboBox::from_label("Bit Depth").selected_text(format!("{bit_depth}-bit")).show_ui(ui, |ui| {
-                            for b in ["16", "24", "32f"] {
-                                ui.selectable_value(bit_depth, b.to_string(), format!("{b}-bit"));
-                            }
-                        });
+                        if mp3 {
+                            craft_ui::ComboBox::from_label("Bitrate").selected_text(format!("{bitrate} kbps")).show_ui(ui, |ui| {
+                                for &b in soundcraft_audio_io::mp3::BITRATES {
+                                    ui.selectable_value(bitrate, b, format!("{b} kbps"));
+                                }
+                            });
+                        } else {
+                            craft_ui::ComboBox::from_label("Bit Depth").selected_text(format!("{bit_depth}-bit")).show_ui(ui, |ui| {
+                                for b in ["16", "24", "32f"] {
+                                    ui.selectable_value(bit_depth, b.to_string(), format!("{b}-bit"));
+                                }
+                            });
+                        }
                     });
+                    if mp3 {
+                        ui.label(
+                            egui::RichText::new("Carries the episode details (File › Episode Info), cover art and one chapter per marker.")
+                                .small()
+                                .color(Tokens::current().text_dim),
+                        );
+                    }
                     let presets = soundcraft_engine::io::LoudnessTarget::PRESETS;
                     let shown = presets.iter().find(|(id, _, _)| *id == loudness.as_str()).map_or("Off", |(_, label, _)| *label);
                     craft_ui::ComboBox::from_label("Loudness")
@@ -659,8 +681,8 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                         .on_hover_text("Normalizes the bounce to this integrated loudness (ITU-R BS.1770), keeping true peaks at or below -1 dBTP");
                     let by_loudness = loudness.as_str() != "off";
                     ui.add_enabled_ui(!by_loudness, |ui| crate::widgets::checkbox(ui, normalize, "Normalize to -0.1 dBFS"));
-                    // 32-bit float keeps every sample as it is: there is nothing to dither.
-                    ui.add_enabled_ui(bit_depth.as_str() != "32f", |ui| {
+                    // 32-bit float keeps every sample as it is, and MP3 has no bit depth: nothing to dither.
+                    ui.add_enabled_ui(bit_depth.as_str() != "32f" && !mp3, |ui| {
                         crate::widgets::checkbox(ui, dither, "Dither (TPDF)").on_hover_text(
                             "Adds ±1 LSB triangular dither when writing 16- or 24-bit files. Leave it off when the master chain already dithers.",
                         );
@@ -680,6 +702,7 @@ pub fn show(app: &mut SoundApp, ctx: &egui::Context) {
                                 "bit_depth": bit_depth,
                                 "normalize": *normalize && !by_loudness,
                                 "loudness": loudness,
+                                "bitrate": bitrate,
                                 "dither": *dither && bit_depth.as_str() != "32f"
                             }),
                         );

@@ -76,6 +76,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("ui.set", "Set UI State", "", None),
     ("ui.theme", "Appearance", "", None),
     ("ui.podcast_mode", "Podcast Mode", "", None),
+    ("window.episode_info", "Episode Info", "File > Episode Info...", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -220,6 +221,16 @@ pub fn tree() -> Vec<MenuNode> {
     }
     for (path, _) in MENU_WINDOWS {
         insert_path(&mut roots, path);
+    }
+    // PodCraft's publishing items (not in the incumbent catalog): episode details next to Get Info,
+    // and chapters among the exports.
+    insert_path(&mut roots, "File > Export > Chapters...");
+    for path in ["Add Chapter Marker", "Add Edit Marker", "Go to Next Edit Marker", "Go to Previous Edit Marker"] {
+        insert_path(&mut roots, &format!("Edit > {path}"));
+    }
+    if let Some(file) = roots.iter_mut().find(|n| n.label == "File") {
+        let at = file.children.iter().position(|n| n.label == "Get Info...").map_or(file.children.len(), |i| i + 1);
+        file.children.insert(at, MenuNode { label: "Episode Info...".into(), path: "File > Episode Info...".into(), children: Vec::new() });
     }
     roots
 }
@@ -383,6 +394,7 @@ fn checked_state(app: &SoundApp, path: &str, id: Option<&str>) -> bool {
         Some("window.track_list") => app.ui.show_tracks_list,
         Some("window.clip_list_view") | Some("window.clip_list") => app.ui.show_clip_list,
         Some("window.narrow_mix") => app.ui.narrow_mix,
+        Some("window.episode_info") => app.ui.show_episode_info,
         Some("window.renderer") => app.extra.show_renderer,
         Some("window.ui_customization") => app.extra.show_ui_customization,
         Some("window.config_auto_update") => app.extra.auto_update_config,
@@ -579,6 +591,11 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
             toggle(&mut app.ui.show_audio_health)
         }
         "window.about" => toggle(&mut app.ui.show_about),
+        "window.episode_info" => {
+            // Opening starts from what the session holds now.
+            app.ui.episode_draft = None;
+            toggle(&mut app.ui.show_episode_info)
+        }
         "window.midi_editor" => toggle(&mut app.ui.show_midi_editor),
         "window.midi_front" => {
             app.ui.show_midi_editor = true;

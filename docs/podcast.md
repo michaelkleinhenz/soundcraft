@@ -51,3 +51,66 @@ peak, once to write with one gain. The gain is the smaller of the one that reach
 the one that keeps the true peak under the ceiling, so a mix with hot peaks lands below the target
 instead of over the ceiling (put a limiter on the master to get closer). The result reports
 `lufs`, `true_peak_db` and the `gain_db` applied.
+
+## Episode info
+
+**File ▸ Episode Info…**, or `episode.set {show?, title?, author?, season?, episode?, date?,
+description?, artwork?, explicit?}` (`episode.get` reads it back). The details are stored in the
+session, and **Apply** is one undoable step. Cover art is a JPEG or PNG (up to 10 MiB; stores
+want 1400–3000 px square); a relative path is read from the session's folder.
+
+## Chapter and edit markers
+
+Two kinds of marker, each one key in Podcast mode (they work whatever the keyboard focus, and
+take over Commands Focus' M and E there):
+
+| Key | Command | Marker | Use |
+|---|---|---|---|
+| **M** | `markers.add_chapter` (Edit ▸ Add Chapter Marker) | yellow, "Chapter n" | starts a chapter in the exports |
+| **E** | `markers.add_edit {comments?}` (Edit ▸ Add Edit Marker) | red triangle, "Edit n" | flags a spot to fix later (a flub, a cough, a retake) |
+
+Both go at the playhead while playing, else at the insertion point, so you can tap them while
+listening back. Edit ▸ Go to Next / Previous Edit Marker (`markers.next_edit`,
+`markers.previous_edit`) step through the edit markers only; delete one in Window ▸ Memory
+Locations once it's fixed. Edit markers are never chapters. Outside Podcast mode the same keys
+work with Commands Keyboard Focus off, and Enter still adds a plain marker.
+
+## Chapters
+
+Every chapter marker (or selection memory location) is a chapter, edit markers aside: its name is the title, it runs to the
+next marker or the end of the export, and the first web address in its comments becomes the
+chapter link. `chapters.list {start?, end?}` shows them.
+
+**File ▸ Export ▸ Chapters…**, or `file.export_chapters {path, format?: json|txt, start?, end?,
+replace?}`, writes either a [Podcasting 2.0](https://github.com/Podcastindex-org/podcast-namespace/blob/main/chapters/jsonChapters.md)
+`chapters.json` (version 1.2.0, with the show and episode title) for the RSS
+`<podcast:chapters>` tag, or plain `MM:SS Title` lines (`H:MM:SS` from an hour on) for show notes
+and YouTube descriptions. Times are relative to the exported range.
+
+## MP3
+
+**File ▸ Bounce Mix… ▸ Format ▸ MP3** (the default in Podcast mode), or `file.bounce_mix
+{path: "….mp3", bitrate?: 128}`. The bitrate is constant, 8 to 320 kbps (the dialog offers 64 to 320, 128 by default; 64 or
+96 suit speech-only mono). An MP3 bounce:
+
+- applies the loudness target like any other bounce;
+- starts with an ID3v2.3 tag holding the episode info (title, show as album, author, season as
+  disc, episode as track, the year of the date, the description as a comment marked
+  `[Explicit]` when set, genre Podcast) and the cover art;
+- carries the chapters as ID3 `CHAP`/`CTOC` frames (at most 255), which Apple Podcasts, Overcast
+  and Pocket Casts show;
+- ends its first frame with an Info/LAME tag, so players know the exact length (gapless, with
+  sample-accurate seeking).
+
+MP3 holds mono or stereo at 48, 44.1 or 32 kHz (and lower rates): a session at 96 kHz or a
+surround mix is refused before any file is written. The encoder is
+[`rusty_mp3`](https://crates.io/crates/rusty_mp3), a pure-Rust Apache-2.0 encoder (LAME and its
+ports are LGPL, which this project does not take).
+
+## FLAC
+
+**File ▸ Bounce Mix… ▸ Format ▸ FLAC** writes a lossless master, 16 or 24 bit, for archiving or
+for hosts that take FLAC. It carries the same episode info as an MP3, as Vorbis comments (`TITLE`,
+`ALBUM`, `ARTIST`, `TRACKNUMBER`, `DISCNUMBER`, `DATE`, `DESCRIPTION`, `GENRE`), the chapters as
+`CHAPTER001=HH:MM:SS.mmm` / `CHAPTER001NAME` / `CHAPTER001URL`, and the cover art as a front-cover
+`PICTURE` block. It keeps the session's sample rate and up to 8 channels.

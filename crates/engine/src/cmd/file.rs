@@ -87,7 +87,7 @@ pub fn specs() -> Vec<CommandSpec> {
                 crate::io::import_video_bytes(e, &path, bytes, at)
             }
         ),
-        cmd!(noundo "file.bounce_mix", "Bounce Mix...", ["File"], Some("Cmd+Alt+B"), "{path, format?: wav|aiff|flac, bit_depth?: 16|24|32f, start?, end?, source?: main|bus name, normalize?: false, loudness?: podcast|podcast_mono|video|broadcast|LUFS number, true_peak?: -1 (dBTP ceiling with loudness), dither?: true, fold_down?: stereo}", always, bounce),
+        cmd!(noundo "file.bounce_mix", "Bounce Mix...", ["File"], Some("Cmd+Alt+B"), "{path, format?: wav|aiff|flac|mp3, bit_depth?: 16|24|32f, bitrate?: 128 (mp3 kbps; mp3 also carries the episode details, cover art and chapters from markers), start?, end?, source?: main|bus name, normalize?: false, loudness?: podcast|podcast_mono|video|broadcast|LUFS number, true_peak?: -1 (dBTP ceiling with loudness), dither?: true, fold_down?: stereo}", always, bounce),
         cmd!(noundo "file.bounce_stems", "Bounce Stems...", [], None, "{dir, format?: wav|aiff|flac, bit_depth?: 16|24|32f, start?, end?, dither?: true, fold_down?: stereo}", has_tracks, |e, p| {
             let dir = str_param(p, "dir").ok_or_else(|| bad("file.bounce_stems", "`dir` required"))?.to_string();
             let r = range_param(e, "file.bounce_stems", p)?;
@@ -199,7 +199,7 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// Writing a session over an existing file needs `replace: true` (see `io::replaces`).
-fn refuse_replacing(e: &Engine, id: &str, file: &std::path::Path, p: &Value) -> Result<()> {
+pub(super) fn refuse_replacing(e: &Engine, id: &str, file: &std::path::Path, p: &Value) -> Result<()> {
     // First, so a path outside the write root is refused as such and never reported as existing.
     crate::file_access::check_write(file).map_err(EngineError::Io)?;
     if crate::io::replaces(e, id, file) && !bool_or(p, "replace", false) {
@@ -359,9 +359,9 @@ pub fn bounce_job(e: &Engine, p: &Value) -> Result<crate::io::Bounce> {
     let r = if r.is_empty() { soundcraft_time::Range::new(0, e.session().content_end().max(1)) } else { r };
     let ext = std::path::Path::new(&path).extension().and_then(std::ffi::OsStr::to_str).unwrap_or("wav").to_ascii_lowercase();
     let format_name = str_param(p, "format").unwrap_or(ext.as_str());
-    let format = soundcraft_audio_io::FileFormat::from_write_extension(format_name).ok_or_else(|| {
+    let format = soundcraft_audio_io::FileFormat::from_export_extension(format_name).ok_or_else(|| {
         let supported = soundcraft_audio_io::FileFormat::writable_extensions().join(", ");
-        bad("file.bounce_mix", format!("cannot write `{format_name}` files (supported: {supported})"))
+        bad("file.bounce_mix", format!("cannot write `{format_name}` files (supported: {supported}, mp3)"))
     })?;
     let bit_depth = match p.get("bit_depth").map(|b| b.to_string().trim_matches('"').to_string()).as_deref() {
         Some("16") => soundcraft_audio_io::BitDepth::Int16,
@@ -373,7 +373,24 @@ pub fn bounce_job(e: &Engine, p: &Value) -> Result<crate::io::Bounce> {
     let fold = fold_down_param(p, "file.bounce_mix")?;
     let bus = bounce_bus(e, p)?;
     let loudness = loudness_param(p)?;
-    let job = crate::io::Bounce::new(e.session_arc(), std::path::Path::new(&path), r, &opts, bus, normalize, fold)?;
+    let job = if format == soundcraft_audio_io::FileFormat::Mp3 {
+        let bitrate = match p.get("bitrate") {
+            None => soundcraft_audio_io::mp3::DEFAULT_BITRATE,
+            Some(v) => v
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| (8..=320).contains(n))
+                .ok_or_else(|| bad("file.bounce_mix", "`bitrate` is kbps from 8 to 320"))?,
+        };
+        let id3 = crate::podcast::id3_tag(e.session(), r)?.to_bytes().map_err(|err| bad("file.bounce_mix", err.to_string()))?;
+        let mp3 = soundcraft_audio_io::mp3::Mp3Options { bitrate_kbps: bitrate, id3 };
+        crate::io::Bounce::new_mp3(e.session_arc(), std::path::Path::new(&path), r, &mp3, bus, normalize, fold)?
+    } else if format == soundcraft_audio_io::FileFormat::Flac {
+        let flac = soundcraft_audio_io::FlacOptions { bit_depth, dither: opts.dither, tag: crate::podcast::id3_tag(e.session(), r)? };
+        crate::io::Bounce::new_flac(e.session_arc(), std::path::Path::new(&path), r, &flac, bus, normalize, fold)?
+    } else {
+        crate::io::Bounce::new(e.session_arc(), std::path::Path::new(&path), r, &opts, bus, normalize, fold)?
+    };
     Ok(match loudness {
         Some(t) => job.with_loudness_target(t),
         None => job,

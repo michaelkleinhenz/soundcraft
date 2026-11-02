@@ -37,6 +37,7 @@ mod open_on_insert;
 mod plugin_window;
 mod podcast_mode;
 mod pro_tools_keys;
+mod publishing;
 mod record_hint;
 mod rename_dialog;
 mod rtp_window;

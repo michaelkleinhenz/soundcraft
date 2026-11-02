@@ -37,8 +37,8 @@ Legend: ✅ supported and tested · 🟡 partial · ❌ missing · — not appli
 | RF64 / BW64 (> 4 GiB) | read/write | ✅ | ✅ | `encode_wav_rf64` |
 | WAV `WAVE_FORMAT_EXTENSIBLE` multichannel with channel mask | read/write | ✅ | ✅ | `encode_with_channel_mask`; default 5.1 import creates a stereo track (#89, PR #128) |
 | AIFF / AIFF-C | native | ✅ | ✅ (`fl32`) | Native; `fl32` retains finite headroom (#791) |
-| FLAC | import | ✅ | ✅ | Own encoder |
-| MP3 | import, bounce | ✅ (symphonia) | ❌ | G-21 |
+| FLAC | import | ✅ | ✅ | Own encoder; bounces carry Vorbis comments, chapters and cover art ([podcast.md](podcast.md#flac)) |
+| MP3 | import, bounce | ✅ (symphonia) | ✅ (CBR 64–320 kbps, ID3 tags, cover art, chapters) | `rusty_mp3` (Apache-2.0); see [podcast.md](podcast.md#mp3) |
 | AAC / M4A / MP4 audio | import, bounce | ✅ (symphonia) | ❌ | G-21 |
 | ALAC | import | ✅ | ❌ | |
 | Ogg Vorbis | — | ✅ | ❌ | Beyond Pro Tools |
