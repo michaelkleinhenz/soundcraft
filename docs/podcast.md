@@ -163,3 +163,18 @@ mix once and reports:
 - more than 2 s of silence at the start or the end;
 - dead air: 3 s or more of near-silence (under -50 dBFS) inside the episode, with a Go button;
 - speaker balance: one speaker track (soloed, through its chain) more than 3 LU louder than another.
+
+## Voice cleanup
+
+Four built-in plugins (insert menus ▸ Other, and **AudioSuite ▸ Noise Reduction** to render them
+into the selected clips), all written from scratch for PodCraft:
+
+| Plugin | Id | What it does | Parameters |
+|---|---|---|---|
+| Noise Reduction | `noise_reduction` | An adaptive spectral gate (1024-point STFT, 75% overlap). Each frequency bin's noise floor follows the quietest level it has had recently, so it learns the room from the pauses between words without a separate noise print; bins near the floor are turned down. Latency 1024 samples (compensated in playback and AudioSuite). | Reduction 0–40 dB, Sensitivity 0–12 dB over the floor, Learn Speed 1–10 s |
+| Hum Removal | `hum_removal` | Narrow notches at 50 or 60 Hz and up to 8 harmonics. | Mains, Harmonics, Width (Q) |
+| De-Click | `de_click` | Finds mouth clicks and pops as sudden high-frequency outliers and bridges each with a line between the good samples around it. Latency 32 samples. | Sensitivity 1–10 |
+| De-Plosive | `de_plosive` | Turns the band below the frequency down only while it bursts over the threshold (a "p" or "b" thump); a Linkwitz-Riley split, so it is transparent when idle. | Frequency, Threshold, Max Reduction |
+
+A steady tone or drone is indistinguishable from noise to Noise Reduction: it is meant for
+speech, which keeps stopping.

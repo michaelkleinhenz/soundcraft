@@ -7,6 +7,7 @@ pub mod eq;
 pub mod harmonic;
 pub mod modulation;
 pub mod pitch;
+pub mod restoration;
 pub mod reverb;
 pub mod sampler;
 pub mod strip;
@@ -24,6 +25,10 @@ pub(crate) static REGISTRY: &[&PluginInfo] = &[
     &dynamics::DEESS_INFO,
     &dynamics::MAX_INFO,
     &strip::STRIP_INFO,
+    &restoration::NR_INFO,
+    &restoration::HUM_INFO,
+    &restoration::CLICK_INFO,
+    &restoration::PLOSIVE_INFO,
     &reverb::ROOM_INFO,
     &reverb::PLATE_INFO,
     &modulation::DELAY_INFO,
@@ -59,6 +64,10 @@ pub(crate) fn instantiate(id: &str) -> Option<Box<dyn Plugin>> {
         "de_esser" => Box::new(dynamics::DeEsser::new()),
         "maximizer" => Box::new(dynamics::Maximizer::new()),
         "channel_strip" => Box::new(strip::ChannelStrip::new()),
+        "noise_reduction" => Box::new(restoration::NoiseReduction::new()),
+        "hum_removal" => Box::new(restoration::HumRemoval::new()),
+        "de_click" => Box::new(restoration::DeClick::new()),
+        "de_plosive" => Box::new(restoration::DePlosive::new()),
         "room_reverb" => Box::new(reverb::Reverb::room()),
         "plate_reverb" => Box::new(reverb::Reverb::plate()),
         "mod_delay" => Box::new(modulation::ModDelay::new()),

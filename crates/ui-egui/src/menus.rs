@@ -150,6 +150,11 @@ pub const AUDIOSUITE: &[(&str, &str)] = &[
     ("AudioSuite > Other > Reverse", "reverse"),
     ("AudioSuite > Other > Signal Generator", "signal_generator"),
     ("AudioSuite > Other > Time Compression Expansion", "time_stretch"),
+    // PodCraft's voice cleanup (not in the incumbent catalog; `tree` adds the paths).
+    ("AudioSuite > Noise Reduction > Noise Reduction", "noise_reduction"),
+    ("AudioSuite > Noise Reduction > Hum Removal", "hum_removal"),
+    ("AudioSuite > Noise Reduction > De-Click", "de_click"),
+    ("AudioSuite > Noise Reduction > De-Plosive", "de_plosive"),
 ];
 
 /// Commands that open a dialog when invoked from a menu (programmatic calls never do).
@@ -228,6 +233,9 @@ pub fn tree() -> Vec<MenuNode> {
     // PodCraft's publishing items (not in the incumbent catalog): episode details next to Get Info,
     // and chapters among the exports.
     insert_path(&mut roots, "File > Export > Chapters...");
+    for (path, _) in AUDIOSUITE.iter().filter(|(p, _)| p.starts_with("AudioSuite > Noise Reduction > ")) {
+        insert_path(&mut roots, path);
+    }
     for (_, name, _) in soundcraft_engine::podcast::VOICE_PRESETS {
         insert_path(&mut roots, &format!("Track > Voice Preset > {name}"));
     }
