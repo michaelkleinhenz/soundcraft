@@ -22,11 +22,35 @@ fn all_paths(tree: &[MenuNode]) -> Vec<String> {
 }
 
 #[test]
-fn every_hidden_path_names_a_real_menu_item() {
+fn every_shown_path_names_a_real_menu_item() {
     let full = all_paths(&menus::tree());
-    for hidden in podcast::HIDDEN_MENU_PATHS {
-        assert!(full.iter().any(|p| p == hidden), "`{hidden}` is not in the menu tree (renamed?)");
+    for shown in podcast::SHOWN_MENU_PATHS {
+        assert!(full.iter().any(|p| p == shown), "`{shown}` is not in the menu tree (renamed?)");
     }
+}
+
+#[test]
+fn the_podcast_menus_are_short_and_plainly_named() {
+    fn leaves(nodes: &[MenuNode]) -> usize {
+        nodes.iter().map(|n| if n.children.is_empty() { 1 } else { leaves(&n.children) }).sum()
+    }
+    let podcast = podcast::visible_tree(menus::tree(), true);
+    let n = leaves(&podcast);
+    assert!(n < 110, "{n} items");
+    assert!(leaves(&menus::tree()) > 3 * n, "the full workstation keeps everything");
+    let shown = all_paths(&podcast);
+    for gone in [
+        "Edit > Selection > Play Edit",
+        "Edit > Automation > Thin",
+        "Options > QuickPunch",
+        "View > Expanded Sends > All",
+        "Clip > Rating > 3",
+        "Window > Pro Tools Search",
+    ] {
+        assert!(!shown.iter().any(|p| p == gone), "{gone}");
+    }
+    assert_eq!(podcast::menu_label(true, "AudioSuite"), "Process");
+    assert_eq!(podcast::menu_label(false, "AudioSuite"), "AudioSuite");
 }
 
 #[test]
@@ -152,7 +176,7 @@ fn music_effects_and_studio_extras_are_hidden() {
     for gone in ["AudioSuite > Pitch Shift", "AudioSuite > Other > Signal Generator", "Track > Freeze", "Window > Task Manager", "File > Sign In"] {
         assert!(!shown.iter().any(|p| p == gone), "{gone}");
     }
-    for kept in ["AudioSuite > Reverb > D-Verb", "AudioSuite > Dynamics > Dyn3 De-Esser", "Window > Transcript"] {
+    for kept in ["AudioSuite > Reverb > D-Verb", "AudioSuite > Dynamics > Dyn3 De-Esser", "AudioSuite > Noise Reduction > Hum Removal"] {
         assert!(shown.iter().any(|p| p == kept), "{kept}");
     }
 }
@@ -173,4 +197,25 @@ fn an_empty_session_in_podcast_mode_offers_to_start_an_episode() {
     h.get_by_label("New Episode…").click();
     h.run_steps(3);
     assert!(matches!(h.state().dialogs.open, Some(soundcraft_ui_egui::dialogs::Dialog::NewSession { .. })));
+}
+
+#[test]
+fn the_quick_start_guide_walks_through_an_episode() {
+    let mut app = SoundApp::new(soundcraft_engine::Engine::default(), None, Services::default());
+    app.ui.podcast_mode = true;
+    app.run("window.quick_start", json!({"value": true})).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+        |ui, app: &mut SoundApp| {
+            app.logic(&ui.ctx().clone());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    for step in soundcraft_ui_egui::panels::QUICK_START_STEPS {
+        assert!(h.query_by_label_contains(step.0).is_some(), "{}", step.0);
+    }
+    h.get_by_label("Auto-Duck Music…").click();
+    h.run_steps(3);
+    assert_eq!(h.state().ui.podcast_tools, Some(soundcraft_ui_egui::panels::PodcastTool::Duck));
 }

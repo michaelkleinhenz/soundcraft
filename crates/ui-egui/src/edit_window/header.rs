@@ -17,11 +17,14 @@ pub(super) fn track_header(app: &mut SoundApp, ui: &mut Ui, track: &Track, head:
     resize_edge(app, ui, track, head);
     strip_buttons(app, ui, track, head);
     name_plate(app, ui, track, head, selected);
-    playlist_menu(app, ui, track, head, head_bg);
     toggle_keys(app, ui, track, head);
     view_selector(app, ui, track, head);
-    voice_row(app, ui, track, head);
-    field_row(app, ui, track, head, head_bg);
+    // Podcast mode leaves out playlists, freeze, voice, automation mode, timebase and Elastic Audio.
+    if !app.ui.podcast_mode {
+        playlist_menu(app, ui, track, head, head_bg);
+        voice_row(app, ui, track, head);
+        field_row(app, ui, track, head, head_bg);
+    }
     let md = app.meters.get(&id).copied().unwrap_or_default();
     header_meter(ui, Rect::from_min_max(pos2(head.max.x - 8.0, head.min.y + 1.0), pos2(head.max.x, head.max.y - 1.5)), &md, track.channels() >= 2);
 }

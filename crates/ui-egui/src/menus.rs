@@ -25,6 +25,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("window.session_info", "Session Info", "", None),
     ("window.audio_health", "Session Audio Health", "", None),
     ("window.about", "About PodCraft", "", None),
+    ("window.quick_start", "Quick Start Guide", "", None),
     ("window.close", "Close Window", "Window > Close Window", Some("Cmd+W")),
     ("window.hide_floating", "Hide All Floating Windows", "Window > Hide All Floating Windows", Some("Cmd+Ctrl+W")),
     ("window.midi_editor", "MIDI Editor", "Window > MIDI Editor", None),
@@ -272,6 +273,9 @@ pub fn menu_bar(app: &mut SoundApp, ui: &mut egui::Ui) {
                         let _ = app.run("window.audio_health", json!({"value": true}));
                     }
                     ui.separator();
+                    if app.ui.podcast_mode && ui.button("Quick Start Guide").clicked() {
+                        let _ = app.run("window.quick_start", json!({"value": true}));
+                    }
                     let mut podcast = app.ui.podcast_mode;
                     if ui.checkbox(&mut podcast, "Podcast Mode").on_hover_text("Hide MIDI, tempo, video and surround features").changed() {
                         let _ = app.run("ui.podcast_mode", json!({"value": podcast}));
@@ -284,7 +288,7 @@ pub fn menu_bar(app: &mut SoundApp, ui: &mut egui::Ui) {
                 });
                 let extra = ui_aliases();
                 for root in crate::podcast::visible_tree(tree(), app.ui.podcast_mode) {
-                    ui.menu_button(&root.label, |ui| {
+                    ui.menu_button(crate::podcast::menu_label(app.ui.podcast_mode, &root.label), |ui| {
                         for c in &root.children {
                             menu_node(app, ui, c, &extra);
                             if c.path == "File > Open" {
@@ -298,7 +302,7 @@ pub fn menu_bar(app: &mut SoundApp, ui: &mut egui::Ui) {
                             ui.separator();
                             ui.label(egui::RichText::new("Processes selected clips offline").small().color(t.text_dim));
                         }
-                        if root.label == "Window" {
+                        if root.label == "Window" && !app.ui.podcast_mode {
                             ui.separator();
                             let mut separate = app.ui.mix_separate;
                             if ui
@@ -621,6 +625,7 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
             toggle(&mut app.ui.show_audio_health)
         }
         "window.about" => toggle(&mut app.ui.show_about),
+        "window.quick_start" => toggle(&mut app.ui.show_quick_start),
         "window.tighten_pauses" | "window.auto_duck" | "window.preflight" | "window.sync_recordings" | "window.segments" | "window.templates" => {
             let tool = match id {
                 "window.tighten_pauses" => crate::panels::PodcastTool::Pauses,

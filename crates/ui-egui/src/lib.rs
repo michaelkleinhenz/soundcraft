@@ -88,6 +88,9 @@ pub struct UiState {
     pub show_session_info: bool,
     pub show_audio_health: bool,
     pub show_about: bool,
+    /// The Quick Start guide (PodCraft menu); the app opens it on a first run.
+    #[serde(skip)]
+    pub show_quick_start: bool,
     /// File › Episode Info, and the edits not applied yet.
     pub show_episode_info: bool,
     #[serde(skip)]
@@ -190,6 +193,7 @@ impl Default for UiState {
             show_session_info: false,
             show_audio_health: false,
             show_about: false,
+            show_quick_start: false,
             show_episode_info: false,
             episode_draft: None,
             podcast_tools: None,

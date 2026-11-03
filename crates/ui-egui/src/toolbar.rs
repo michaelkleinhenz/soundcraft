@@ -35,7 +35,10 @@ pub fn show(app: &mut SoundApp, ui: &mut Ui) {
                 zoom_group(app, ui);
                 tools(app, ui);
                 counters(app, ui);
-                grid_nudge(app, ui);
+                // Podcast mode edits speech, not bars: no grid or nudge values.
+                if !app.ui.podcast_mode {
+                    grid_nudge(app, ui);
+                }
                 transport(app, ui);
                 if !app.ui.podcast_mode {
                     tempo_meter(app, ui);
@@ -178,16 +181,18 @@ fn zoom_group(app: &mut SoundApp, ui: &mut Ui) {
 fn tools(app: &mut SoundApp, ui: &mut Ui) {
     let t = Tokens::current();
     let cur = app.engine.session().edit.tool;
-    // Podcast mode drops two tools (Scrubber, Pencil) and two toggles, so the group is narrower.
-    let width = if app.ui.podcast_mode { 268.0 + 38.0 - 76.0 } else { 268.0 + 38.0 };
+    // Podcast mode keeps four tools (Zoom, Trim, Selector, Grabber) on one row, without Zoom
+    // Toggle, Scrubber, Pencil or the option toggles below them.
+    let podcast = app.ui.podcast_mode;
+    let width = if podcast { 38.0 * 4.0 + 8.0 } else { 268.0 + 38.0 };
     group(ui, width, 52.0, |ui, r| {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 3.0);
             let row = ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                // In Podcast mode E adds an edit marker instead.
-                let tip = if app.ui.podcast_mode { "Zoom Toggle" } else { "Zoom Toggle (E)" };
-                if icon_button(ui, vec2(36.0, 26.0), "zoom_toggle", app.engine.session().edit.zoom_toggle.is_some(), tip).clicked() {
+                if !podcast
+                    && icon_button(ui, vec2(36.0, 26.0), "zoom_toggle", app.engine.session().edit.zoom_toggle.is_some(), "Zoom Toggle (E)").clicked()
+                {
                     crate::edit_window::zoom_toggle(app);
                 }
                 for (tool, icon) in [
@@ -199,11 +204,12 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
                     (Tool::Pencil, "pencil"),
                 ] {
                     // Podcast mode keeps the editing tools; Scrubber and Pencil stay on F9/F10.
-                    if app.ui.podcast_mode && matches!(tool, Tool::Scrubber | Tool::Pencil) {
+                    if podcast && matches!(tool, Tool::Scrubber | Tool::Pencil) {
                         continue;
                     }
                     let smart_member = cur == Tool::Smart && matches!(tool, Tool::Trim | Tool::Selector | Tool::Grabber);
-                    let tip = format!("{}{}", tool.label(), tool.fkey().map(|k| format!(" ({k})")).unwrap_or_default());
+                    let key = tool.fkey().map(|k| format!(" ({k})")).unwrap_or_default();
+                    let tip = if podcast { format!("{}{key}: {}", tool.label(), tool_help(tool)) } else { format!("{}{key}", tool.label()) };
                     if icon_button(ui, vec2(36.0, 26.0), icon, cur == tool || smart_member, &tip).clicked() {
                         let _ = app.run("edit.tool", json!({"tool": tool.id()}));
                     }
@@ -211,13 +217,16 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
             });
             // Smart tool bracket above Trim/Selector/Grabber.
             let rr = row.response.rect;
-            let bx0 = rr.min.x + 76.0;
+            let bx0 = rr.min.x + if podcast { 38.0 } else { 76.0 };
             let bx1 = bx0 + 38.0 * 3.0 - 2.0;
             let bracket = Rect::from_min_max(pos2(bx0 - 2.0, r.min.y + 1.0), pos2(bx1 + 2.0, r.min.y + 5.0));
             let resp = ui.interact(bracket.expand2(vec2(0.0, 2.0)), ui.scope_id().with("smart"), Sense::click());
             ui.painter().rect_filled(bracket, 1.0, if cur == Tool::Smart { t.accent } else { t.tool_bracket_off });
             if resp.on_hover_text("Smart Tool (F6+F7 / F7+F8)").clicked() {
                 let _ = app.run("edit.tool", json!({"tool": "smart"}));
+            }
+            if podcast {
+                return;
             }
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -230,9 +239,6 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
                     ("options.automation_follows_edit", "wave", e.automation_follows_edit, "Automation Follows Edit"),
                 ];
                 for (id, icon, on, tip) in toggles {
-                    if app.ui.podcast_mode && matches!(id, "options.mirrored_midi" | "options.tab_to_transient") {
-                        continue;
-                    }
                     if icon_button(ui, vec2(36.0, 18.0), icon, on, tip).clicked() {
                         let _ = app.run(id, json!({}));
                     }
@@ -245,6 +251,17 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
             });
         });
     });
+}
+
+/// What a tool does, for Podcast mode's tooltips.
+fn tool_help(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Zoom => "click to zoom in, Alt-click to zoom out",
+        Tool::Trim => "drag a clip's edge to shorten or lengthen it",
+        Tool::Selector => "drag to select a stretch of time to play, cut or delete",
+        Tool::Grabber => "drag clips to move them",
+        _ => "",
+    }
 }
 
 fn fmt_pos(app: &SoundApp, at: i64, f: TimeFormat) -> String {

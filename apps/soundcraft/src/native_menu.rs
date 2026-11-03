@@ -35,6 +35,9 @@ impl NativeMenu {
         let mut native = Self { menu, entries: Vec::new(), events, last_sync: None, podcast_mode: app.ui.podcast_mode };
         let app_menu = Submenu::new("PodCraft", true);
         native.add_item(app, &app_menu, "About PodCraft", "", Some("window.about".into()))?;
+        if app.ui.podcast_mode {
+            native.add_item(app, &app_menu, "Quick Start Guide", "", Some("window.quick_start".into()))?;
+        }
         native.add_item(app, &app_menu, "Session Info", "", Some("window.session_info".into()))?;
         native.add_item(app, &app_menu, "Session Audio Health", "", Some("window.audio_health".into()))?;
         app_menu.append(&PredefinedMenuItem::separator())?;
@@ -50,7 +53,8 @@ impl NativeMenu {
         native.add_item(app, &app_menu, "Quit PodCraft", "", Some("app.quit".into()))?;
         native.menu.append(&app_menu)?;
         let aliases = menus::ui_aliases();
-        for root in soundcraft_ui_egui::podcast::visible_tree(menus::tree(), app.ui.podcast_mode) {
+        for mut root in soundcraft_ui_egui::podcast::visible_tree(menus::tree(), app.ui.podcast_mode) {
+            root.label = soundcraft_ui_egui::podcast::menu_label(app.ui.podcast_mode, &root.label).to_string();
             let submenu = native.add_branch(app, &root, &aliases)?;
             native.menu.append(&submenu)?;
         }
