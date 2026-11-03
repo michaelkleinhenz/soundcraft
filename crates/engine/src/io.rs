@@ -20,7 +20,7 @@ mod strip;
 
 use bundle::BundleLimits;
 pub use bundle::{BUNDLE_EXTENSION, open_session_bytes, session_bundle};
-pub use import::{DecodedImport, add_source, decode_import, import_audio_bytes, load_sampler_bytes, relink_videos};
+pub use import::{DecodedImport, add_source, decode_import, import_audio_bytes, import_source, load_sampler_bytes, relink_videos};
 pub(crate) use import::{MAX_IMPORT_SAMPLES, at_rate, place_decoded};
 pub use midi::{export_midi, import_midi_bytes};
 pub use record::{Recording, Take, add_recording, live_span, place_recording};
@@ -83,6 +83,23 @@ pub(crate) fn make_dir(dir: impl AsRef<Path>) -> Result<()> {
     let checked = if dir.as_os_str().is_empty() { Path::new(".") } else { dir };
     crate::file_access::check_write(checked).map_err(EngineError::Io)?;
     std::fs::create_dir_all(dir).map_err(|err| EngineError::Io(format!("{}: {err}", dir.display())))
+}
+
+/// The files in `dir` with extension `ext` (sorted), inside the read roots; none when the folder
+/// can't be read or doesn't exist.
+pub(crate) fn files_in(dir: &Path, ext: &str) -> Vec<PathBuf> {
+    if cfg!(target_arch = "wasm32") || crate::file_access::check_read(dir).is_err() {
+        return Vec::new();
+    }
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|p| p.extension().and_then(OsStr::to_str) == Some(ext))
+        .collect();
+    out.sort();
+    out
 }
 
 /// Write `bytes` to the file at `path`, inside the automation write root when there is one.
@@ -513,7 +530,7 @@ const MAX_BOUNCE_SECS: f64 = 4.0 * 3600.0;
 /// The format, channel count and fold-down source of a bounce of the main mix or `bus`: every
 /// channel (a mono or stereo main mix as stereo), or an ITU stereo fold-down of a surround source
 /// when `fold_stereo`.
-fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (ChannelFormat, usize, Option<ChannelFormat>) {
+pub(crate) fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (ChannelFormat, usize, Option<ChannelFormat>) {
     let nch = soundcraft_mix::source_channels(s, bus);
     let fmt = match bus {
         Some(id) => s.bus(id).map_or(ChannelFormat::Stereo, |b| b.format),
@@ -524,7 +541,7 @@ fn bounce_layout(s: &Session, bus: Option<BusId>, fold_stereo: bool) -> (Channel
 }
 
 /// The first `n` frames of `chunk`, folded down from `fold` when set and scaled by `gain`.
-fn fill(block: &mut Vec<Vec<f32>>, chunk: &[Vec<f32>], n: usize, fold: Option<ChannelFormat>, gain: f32) {
+pub(crate) fn fill(block: &mut Vec<Vec<f32>>, chunk: &[Vec<f32>], n: usize, fold: Option<ChannelFormat>, gain: f32) {
     let folded = fold.map(|from| soundcraft_mix::fold_down_stereo(from, chunk));
     let src = folded.as_deref().unwrap_or(chunk);
     block.resize_with(src.len(), Vec::new);
@@ -783,7 +800,11 @@ pub fn replaces(e: &Engine, command: &str, file: &Path) -> bool {
         "session.save" | "session.save_as" | "session.save_copy" => {
             file.exists() && !e.path.as_deref().is_some_and(|own| same_path(Path::new(own), file))
         }
-        "session.save_template" | "file.export_selected_tracks_as_session" | "file.export_session_text" | "file.export_chapters" => file.exists(),
+        "session.save_template"
+        | "template.save"
+        | "file.export_selected_tracks_as_session"
+        | "file.export_session_text"
+        | "file.export_chapters" => file.exists(),
         _ => false,
     }
 }

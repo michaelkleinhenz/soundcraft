@@ -81,19 +81,26 @@ fn edit_modes(app: &mut SoundApp, ui: &mut Ui) {
     let ed = &app.engine.session().edit;
     let state = ModeCellState { cur: ed.edit_mode, snap: ed.flag(SNAP_TO_GRID), locked: ed.flag(SHUFFLE_LOCK) };
     let cmd = crate::shortcuts::shortcut_label("Cmd", ui.ctx().os() == egui::os::OperatingSystem::Mac);
-    let modes = [
-        (EditMode::Shuffle, 0, 0, "SHUFFLE", "F1"),
-        (EditMode::Spot, 1, 0, "SPOT", "F3"),
-        (EditMode::Slip, 0, 1, "SLIP", "F2"),
-        (EditMode::Grid, 1, 1, "GRID", "F4"),
-    ];
+    // Podcast mode offers the two speech-editing modes side by side; Spot and Grid stay on F3/F4.
+    let podcast = app.ui.podcast_mode;
+    let modes: &[(EditMode, i32, i32, &str, &str)] = if podcast {
+        &[(EditMode::Shuffle, 0, 0, "SHUFFLE", "F1"), (EditMode::Slip, 1, 0, "SLIP", "F2")]
+    } else {
+        &[
+            (EditMode::Shuffle, 0, 0, "SHUFFLE", "F1"),
+            (EditMode::Spot, 1, 0, "SPOT", "F3"),
+            (EditMode::Slip, 0, 1, "SLIP", "F2"),
+            (EditMode::Grid, 1, 1, "GRID", "F4"),
+        ]
+    };
+    let rows = if podcast { 1.0 } else { 2.0 };
     let widest =
         modes.iter().map(|m| m.3).chain(["REL GRID"]).map(|l| ui.painter().layout_no_wrap(l.into(), bold(10.5), t.text).size().x).fold(0.0, f32::max);
     group(ui, 2.0 * widest + 44.0, 52.0, |ui, r| {
         let inner = r.shrink(6.0);
         let cw = inner.width() / 2.0;
-        let ch = inner.height() / 2.0;
-        for (m, cx, cy, label, fkey) in modes {
+        let ch = inner.height() / rows;
+        for &(m, cx, cy, label, fkey) in modes {
             let cell = Rect::from_min_size(pos2(inner.min.x + cw * cx as f32, inner.min.y + ch * cy as f32), vec2(cw, ch)).shrink(1.0);
             let resp = ui.interact(cell, ui.scope_id().with(("mode", label)), Sense::click());
             draw_mode_cell(ui.painter(), cell, &resp, &t, m, &state, label);
@@ -171,7 +178,9 @@ fn zoom_group(app: &mut SoundApp, ui: &mut Ui) {
 fn tools(app: &mut SoundApp, ui: &mut Ui) {
     let t = Tokens::current();
     let cur = app.engine.session().edit.tool;
-    group(ui, 268.0 + 38.0, 52.0, |ui, r| {
+    // Podcast mode drops two tools (Scrubber, Pencil) and two toggles, so the group is narrower.
+    let width = if app.ui.podcast_mode { 268.0 + 38.0 - 76.0 } else { 268.0 + 38.0 };
+    group(ui, width, 52.0, |ui, r| {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 3.0);
             let row = ui.horizontal(|ui| {
@@ -189,6 +198,10 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
                     (Tool::Scrubber, "scrubber"),
                     (Tool::Pencil, "pencil"),
                 ] {
+                    // Podcast mode keeps the editing tools; Scrubber and Pencil stay on F9/F10.
+                    if app.ui.podcast_mode && matches!(tool, Tool::Scrubber | Tool::Pencil) {
+                        continue;
+                    }
                     let smart_member = cur == Tool::Smart && matches!(tool, Tool::Trim | Tool::Selector | Tool::Grabber);
                     let tip = format!("{}{}", tool.label(), tool.fkey().map(|k| format!(" ({k})")).unwrap_or_default());
                     if icon_button(ui, vec2(36.0, 26.0), icon, cur == tool || smart_member, &tip).clicked() {
@@ -217,7 +230,7 @@ fn tools(app: &mut SoundApp, ui: &mut Ui) {
                     ("options.automation_follows_edit", "wave", e.automation_follows_edit, "Automation Follows Edit"),
                 ];
                 for (id, icon, on, tip) in toggles {
-                    if app.ui.podcast_mode && id == "options.mirrored_midi" {
+                    if app.ui.podcast_mode && matches!(id, "options.mirrored_midi" | "options.tab_to_transient") {
                         continue;
                     }
                     if icon_button(ui, vec2(36.0, 18.0), icon, on, tip).clicked() {

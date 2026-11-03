@@ -285,7 +285,10 @@ fn cut_copy(e: &mut Engine, p: &Value, cut: bool, id: &str) -> Result<Value> {
         .session()
         .markers
         .iter()
-        .filter(|m| matches!(m.kind, soundcraft_model::MarkerKind::Marker | soundcraft_model::MarkerKind::Edit) && range.contains(m.start))
+        .filter(|m| {
+            matches!(m.kind, soundcraft_model::MarkerKind::Marker | soundcraft_model::MarkerKind::Edit | soundcraft_model::MarkerKind::Ad)
+                && range.contains(m.start)
+        })
         .map(|m| {
             let mut m = m.clone();
             m.end -= m.start;

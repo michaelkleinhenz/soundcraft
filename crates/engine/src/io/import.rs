@@ -128,6 +128,16 @@ pub fn import_audio_bytes(e: &mut Engine, name: &str, bytes: &[u8], path: Option
     place_import(e, name, &info, audio, path, target, at)
 }
 
+/// Decodes an audio file into a new source of the session without placing a clip; returns the
+/// source and its length in samples (Insert Segment places it itself).
+pub fn import_source(e: &mut Engine, name: &str, bytes: &[u8], path: Option<&str>) -> Result<(SourceId, Samples)> {
+    let (info, audio) = decode_import_bytes(name, bytes, e.session().sample_rate.hz())?;
+    let s = e.session_mut();
+    let src = add_source_audio(s, name, audio, path, info.format);
+    let frames = s.source(src).map_or(0, |x| i64::try_from(x.frames).unwrap_or(0));
+    Ok((src, frames))
+}
+
 /// Place audio from [`decode_import`] (made for this session's rate) as `import_audio_bytes` does.
 pub(crate) fn place_decoded(e: &mut Engine, name: &str, d: DecodedImport, path: Option<&str>, target: Option<TrackId>, at: Samples) -> Result<Value> {
     place_import(e, name, &d.info, d.audio, path, target, at)

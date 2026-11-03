@@ -26,12 +26,15 @@ mod more_util;
 mod options;
 mod plugin_state;
 mod podcast;
+mod produce;
 mod query;
 pub(crate) mod sampler;
+mod segments;
 mod setup_more;
 mod strip_silence;
 mod surround;
 mod tab;
+mod templates;
 mod track;
 mod track_more;
 mod transport;
@@ -164,6 +167,9 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(zoom_toggle::specs());
         v.extend(strip_silence::specs());
         v.extend(podcast::specs());
+        v.extend(produce::specs());
+        v.extend(segments::specs());
+        v.extend(templates::specs());
         #[cfg(test)]
         v.extend(panic_probe::specs());
         v

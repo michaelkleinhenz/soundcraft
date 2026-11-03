@@ -27,6 +27,30 @@ pub struct EpisodeInfo {
     pub explicit: bool,
 }
 
+/// How the episode is exported (Bounce Mix's choices, remembered with the session and carried by
+/// episode templates).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ExportSettings {
+    /// wav, aiff, flac or mp3.
+    pub format: String,
+    /// 16, 24 or 32f (WAV, AIFF, FLAC).
+    pub bit_depth: String,
+    /// A loudness preset id (podcast, podcast_mono, video, broadcast) or "off".
+    pub loudness: String,
+    /// MP3 kbps.
+    pub bitrate: u32,
+    /// Peak-normalize to -0.1 dBFS (when loudness is off).
+    pub normalize: bool,
+    pub dither: bool,
+}
+
+impl Default for ExportSettings {
+    fn default() -> Self {
+        ExportSettings { format: "mp3".into(), bit_depth: "24".into(), loudness: "podcast".into(), bitrate: 128, normalize: false, dither: false }
+    }
+}
+
 impl EpisodeInfo {
     /// Whether nothing is set.
     pub fn is_empty(&self) -> bool {

@@ -141,3 +141,36 @@ fn the_menu_bar_has_no_event_menu_in_podcast_mode() {
     assert!(!menu_bar_has(true, "Event"));
     assert!(menu_bar_has(true, "PodCraft"));
 }
+
+#[test]
+fn music_effects_and_studio_extras_are_hidden() {
+    assert!(!podcast::offers_plugin(true, "chorus") && !podcast::offers_plugin(true, "pitch_shifter"));
+    assert!(podcast::offers_plugin(true, "eq_7band") && podcast::offers_plugin(true, "room_reverb") && podcast::offers_plugin(true, "de_esser"));
+    assert!(podcast::offers_plugin(false, "chorus"), "the full workstation keeps them");
+    assert!(!podcast::offers_track_kind(soundcraft_model::TrackKind::Vca));
+    let shown = all_paths(&podcast::visible_tree(menus::tree(), true));
+    for gone in ["AudioSuite > Pitch Shift", "AudioSuite > Other > Signal Generator", "Track > Freeze", "Window > Task Manager", "File > Sign In"] {
+        assert!(!shown.iter().any(|p| p == gone), "{gone}");
+    }
+    for kept in ["AudioSuite > Reverb > D-Verb", "AudioSuite > Dynamics > Dyn3 De-Esser", "Window > Transcript"] {
+        assert!(shown.iter().any(|p| p == kept), "{kept}");
+    }
+}
+
+#[test]
+fn an_empty_session_in_podcast_mode_offers_to_start_an_episode() {
+    let mut app = SoundApp::new(soundcraft_engine::Engine::default(), None, Services::default());
+    app.ui.podcast_mode = true;
+    let mut h = Harness::builder().with_size(vec2(1600.0, 1000.0)).build_ui_state(
+        |ui, app: &mut SoundApp| {
+            app.logic(&ui.ctx().clone());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    assert!(h.query_by_label("SPOT").is_none() && h.query_by_label("SHUFFLE").is_some(), "Shuffle and Slip only");
+    h.get_by_label("New Episode…").click();
+    h.run_steps(3);
+    assert!(matches!(h.state().dialogs.open, Some(soundcraft_ui_egui::dialogs::Dialog::NewSession { .. })));
+}
