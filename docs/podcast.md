@@ -8,31 +8,38 @@ workstation, which stays one switch away.
 **PodCraft menu ▸ Podcast Mode** (command `ui.podcast_mode {value?: bool}`, toggles without
 `value`). A first run starts in it; the choice is saved with the other settings.
 
-It hides, from the menus, the toolbar, the rulers and the New Tracks dialog:
+**Menus.** Podcast mode shows a short list of podcast items (about 90 of the workstation's 500)
+and hides the rest: recording, editing speech, cleaning it up, mixing and publishing. The list,
+`SHOWN_MENU_PATHS` in `crates/ui-egui/src/podcast.rs`, is an allowlist, so new workstation
+features stay out of Podcast mode until someone adds them; a test checks every entry is a real
+menu item. AudioSuite is called **Process** in the menu bar.
 
-- **MIDI, instruments and notation:** the Event menu, MIDI editor, event list, MIDI keyboard,
-  score editor, MIDI import/export, Sibelius, MIDI setup, MIDI, Instrument and Video track kinds.
-- **Music timing:** Bars|Beats, tempo, meter, key and chord rulers, the tempo/meter toolbar
-  readout, click, elastic audio and warping.
-- **Video and post-production:** video windows and import, timecode and feet+frames, AAF/OMF and
-  Media Composer export, sync offsets.
-- **Surround:** every track width other than mono and stereo, object views and Atmos automation.
-- **Music effects:** pitch, time shift, modulation and delay, lo-fi, rectifier, subharmonic,
-  amp sims, the plate reverb, the signal generator and time compression/expansion, from the insert
-  menus and AudioSuite. EQ, dynamics, the channel strip, the room reverb, gain, trim, DC removal,
-  dither, the saturator and third-party plugins stay.
-- **Studio and console extras:** VCA tracks, routing folders, Freeze/Commit, insert bypass by
-  category, playlists, Narrow Mix, workspaces, window configurations, Task Manager, peripherals,
-  disk allocation, collaboration, sign-in and the dashboard.
+**Everything else it hides**, from the toolbar, the track headers, the rulers, the plugin lists and
+the New Tracks dialog:
 
-The Edit window is simpler too: the toolbar offers Shuffle and Slip (Spot and Grid stay on F3 and
-F4) and the Trim, Selector, Grabber and Zoom tools (Scrubber and Pencil stay on F9 and F10), and
-an empty session shows a **Start an episode** card with New Episode…, Import Recordings… and Open
-Session…. Speaker tracks from the template are Large, so speech waveforms are easy to read.
+- **MIDI, instruments and notation:** MIDI, Instrument and Video track kinds and the music windows.
+- **Music timing:** Bars|Beats, tempo, meter, key and chord rulers, the tempo/meter readout, the
+  grid and nudge values.
+- **Video and surround:** timecode and feet+frames rulers, every track width but mono and stereo.
+- **Music effects:** pitch, time shift, modulation and delay, lo-fi, rectifier, subharmonic, amp
+  sims, the plate reverb and the signal generator in the insert menus. EQ, dynamics, the channel
+  strip, the room reverb, gain, trim, DC removal, dither, the saturator, the voice cleanup plugins
+  and third-party plugins stay.
+- **Studio extras:** VCA tracks; in the track headers, playlists, freeze, voice, automation mode,
+  timebase and Elastic Audio; the Markers 2–5 rulers.
 
-Nothing is unregistered: shortcuts, the CLI, the control channel and MCP still run every command.
-The list lives in `crates/ui-egui/src/podcast.rs`; a test checks that every hidden path is a real
-menu item.
+The Edit window toolbar offers Shuffle and Slip (Spot and Grid stay on F3 and F4) and four tools,
+Zoom, Trim, Selector and Grabber, whose tooltips say what each does (Scrubber and Pencil stay on F9
+and F10). An empty session shows a **Start an episode** card with New Episode…, From a Template…,
+Import Recordings…, Open Session… and the Quick Start Guide. Speaker tracks from the template are
+Large, so speech waveforms are easy to read.
+
+**Quick Start Guide** (PodCraft menu, `window.quick_start`; a first run opens it): making an
+episode in six steps (start, record or import, edit, clean up, music and segments, check and
+publish), each with buttons that open the tools for that step.
+
+Nothing is unregistered: shortcuts, the CLI, the control channel and MCP still run every command,
+and switching Podcast mode off brings the full workstation back.
 
 ## New episode template
 

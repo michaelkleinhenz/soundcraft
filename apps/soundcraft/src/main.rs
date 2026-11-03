@@ -231,8 +231,9 @@ fn main() -> eframe::Result {
     }
 
     let engine = if demo { soundcraft_engine::demo::demo_engine() } else { Engine::default() };
-    // A first run (no saved settings) starts in Podcast mode, PodCraft's default.
-    let prefs = load_prefs(&env).unwrap_or_else(|| UiState { podcast_mode: true, ..UiState::default() });
+    // A first run (no saved settings) starts in Podcast mode, PodCraft's default, with the Quick
+    // Start guide open.
+    let prefs = load_prefs(&env).unwrap_or_else(|| UiState { podcast_mode: true, show_quick_start: true, ..UiState::default() });
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("PodCraft")

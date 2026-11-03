@@ -1,6 +1,7 @@
-//! Podcast mode: PodCraft's default profile. It hides the music-production features (MIDI,
-//! instruments and notation; tempo, meter and click; video and timecode; surround) from the menus,
-//! the toolbar, the rulers and the New Tracks dialog.
+//! Podcast mode: PodCraft's default profile. The menus show only a short list of podcast items
+//! ([`SHOWN_MENU_PATHS`]); the toolbar, track headers, rulers, plugin lists and the New Tracks
+//! dialog drop the music, video, surround and studio features; a Quick Start guide walks through
+//! making an episode.
 //!
 //! Only the presentation changes: every command stays registered, so shortcuts, the CLI, the
 //! control channel and MCP still reach it, and switching the mode off brings the full workstation
@@ -11,124 +12,115 @@ use crate::menus::MenuNode;
 use serde_json::{Value, json};
 use soundcraft_model::{ChannelFormat, TrackKind};
 
-/// Menu paths hidden in Podcast mode, with everything under them.
-pub const HIDDEN_MENU_PATHS: &[&str] = &[
-    // MIDI, instruments and notation.
-    "Event",
-    "File > Send To...",
-    "File > Import > MIDI...",
-    "File > Export > MIDI...",
-    "File > Export > Sibelius...",
-    "File > Score Setup...",
-    "File > Print Score...",
-    "Track > Extract MIDI to New Track",
-    "Track > Write MIDI Real-Time Properties",
-    "Track > ARA Plugins",
-    "Clip > ARA Plugins",
-    "Clip > New MIDI Clip",
-    "Edit > Copy Special > Audio as MIDI",
-    "Edit > Paste Special > Merge MIDI",
-    "Setup > MIDI",
-    "Options > Mirrored MIDI Editing",
-    "Options > MIDI Thru",
-    "Options > MIDI Live Mode",
-    "Window > MIDI Editor",
-    "Window > MIDI Event List",
-    "Window > MIDI Keyboard",
-    "Window > MIDI Editors",
-    "Window > Score Editor",
-    "View > Other Displays > MIDI Input Display",
-    "View > Other Displays > Lower Dock > MIDI Editor",
-    "View > Transport > MIDI Controls",
-    "View > Edit Window Views > Instruments",
-    "View > Edit Window Views > Real-Time Properties",
-    "View > Mix Window Views > Instruments",
-    // Music timing: bars and beats, tempo, meter, key, chords, click, warping.
-    "View > Rulers > Bars|Beats",
-    "View > Rulers > Tempo",
-    "View > Rulers > Meter",
-    "View > Rulers > Key Signature",
-    "View > Rulers > Chord Symbols",
-    "View > Main Counter > Bars|Beats",
-    "View > Transport > Ableton Link",
-    "Track > Create Click Track",
-    "Options > Click",
-    "Setup > Click/Countoff...",
-    "Clip > Elastic Properties",
-    "Clip > Conform to Tempo",
-    "Clip > Remove Warp",
-    "Clip > Remove Pitch Shift",
-    "Edit > TCE Edit to Timeline Selection",
-    // Video and post-production.
-    "File > Import > Video...",
-    "File > Import > VENUE Channel Names as Track Names",
-    "File > Export > Selected Tracks as New AAF/OMF...",
-    "File > Export > Selected Tracks as New Media Composer Compatible Session...",
-    "Window > Video",
-    "Window > Video Universe",
-    "View > Rulers > Timecode",
-    "View > Rulers > Timecode 2",
-    "View > Rulers > Feet+Frames",
-    "View > Main Counter > Timecode",
-    "View > Main Counter > Feet+Frames",
-    "View > Dropped Video Frame Indicator",
-    "View > Transport > Synchronization",
-    "Setup > Video Sync Offset...",
-    "Setup > Current Feet+Frames Position...",
-    "Setup > Current Timecode Position...",
-    "Setup > External Timecode Offset...",
-    "Setup > Machine Track Arming Profiles...",
-    "Options > Video Track Online",
-    // Surround and immersive.
-    "Track > Change Track Width > Show / Hide...",
-    "Edit > Automation > Duplicate Dolby Atmos Plugin Automation to Pan Automation",
-    "Edit > Automation > Duplicate Pan Automation to Dolby Atmos Plugin Automation",
-    "View > Edit Window Views > Object",
-    "View > Mix Window Views > Object",
-    // Music effects (A5): pitch, modulation, lo-fi distortion, signal generation, time stretch.
-    "AudioSuite > Pitch Shift",
-    "AudioSuite > Modulation",
-    "AudioSuite > Delay",
-    "AudioSuite > Harmonic > Lo-Fi",
-    "AudioSuite > Harmonic > Recti-Fi",
-    "AudioSuite > Harmonic > SansAmp PSA-1",
-    "AudioSuite > Harmonic > Eleven Lite",
-    "AudioSuite > Other > Signal Generator",
-    "AudioSuite > Other > Time Compression Expansion",
-    // Studio and console extras (A6).
-    "Track > Convert Aux to Routing Folder",
-    "Track > Freeze",
-    "Track > Commit...",
-    "Track > Bypass Inserts",
-    "Track > Coalesce VCA Controller Automation",
-    "Track > Designate as Target Playlist",
-    "Track > Show Target Playlist",
-    "Track > Toggle Recent Playlist",
-    "Edit > Copy Selection to...",
-    "Edit > Move Selection to...",
-    "View > Automation > Trim Playlist",
-    "View > Automation > Composite Playlist",
-    "View > Narrow Mix",
-    "View > Other Displays > Universe",
-    "File > Open > Project...",
-    "File > Open > Sketch...",
-    "File > Dashboard...",
-    "File > Start Collaboration...",
-    "File > Sign In",
-    "File > Import > Clip Groups...",
-    "Setup > Disk Allocation...",
-    "Setup > Peripherals...",
-    "Window > Configurations",
-    "Window > Sketch to Front",
-    "Window > ARA Plugins",
-    "Window > Splice",
-    "Window > SoundFlow",
-    "Window > Task Manager",
-    "Window > New Workspace",
-    "Window > Workspaces",
-    "Window > Machine Track Arming",
-    "Window > Collaboration",
+/// The menu items Podcast mode shows, in the menus' own order: everything else is hidden. An entry
+/// that names a submenu keeps all of it. Kept short on purpose, so the menus read as a podcast
+/// tool: recording, editing speech, cleaning it up, mixing and publishing.
+pub const SHOWN_MENU_PATHS: &[&str] = &[
+    // File: sessions, episode details, importing recordings and publishing.
+    "File > New...",
+    "File > Episode Templates...",
+    "File > Open > Session...",
+    "File > Close Session",
+    "File > Save Session",
+    "File > Save Session As...",
+    "File > Revert Session to Saved...",
+    "File > Import > Audio...",
+    "File > Episode Info...",
+    "File > Episode Pre-flight Check...",
+    "File > Bounce Mix...",
+    "File > Export > Chapters...",
+    // Edit: the everyday edits, speech tools and markers.
+    "Edit > Can't Undo",
+    "Edit > Can't Redo",
+    "Edit > Cut",
+    "Edit > Copy",
+    "Edit > Paste",
+    "Edit > Clear",
+    "Edit > Select All",
+    "Edit > Duplicate",
+    "Edit > Insert Silence",
+    "Edit > Separate > At Selection",
+    "Edit > Heal Separation",
+    "Edit > Trim > To Selection",
+    "Edit > Fades > Create...",
+    "Edit > Fades > Delete",
+    "Edit > Mute",
+    "Edit > Strip Silence",
+    "Edit > Tighten Pauses...",
+    "Edit > Insert Segment...",
+    "Edit > Add Chapter Marker",
+    "Edit > Add Edit Marker",
+    "Edit > Add Ad Slot Marker",
+    "Edit > Go to Next Edit Marker",
+    "Edit > Go to Previous Edit Marker",
+    // View: the time scale, markers, side lists and waveform style.
+    "View > Rulers > Min:Secs",
+    "View > Rulers > Markers",
+    "View > Main Counter > Min:Secs",
+    "View > Main Counter > Samples",
+    "View > Edit Window Views > Inserts A-E",
+    "View > Edit Window Views > I/O",
+    "View > Edit Window Views > Minimal",
+    "View > Mix Window Views > Inserts A-E",
+    "View > Mix Window Views > Sends A-E",
+    "View > Mix Window Views > I/O",
+    "View > Mix Window Views > Track Color",
+    "View > Other Displays > Track List",
+    "View > Other Displays > Clip List",
+    "View > Waveforms > Peak",
+    "View > Waveforms > Power",
+    // Track: tracks, voice chains and the podcast tools.
+    "Track > New...",
+    "Track > Duplicate...",
+    "Track > Delete",
+    "Track > Change Track Width > Mono",
+    "Track > Change Track Width > Stereo",
+    "Track > Make Inactive",
+    "Track > Voice Preset",
+    "Track > Auto-Duck Music...",
+    "Track > Sync Remote Recordings...",
+    // Clip.
+    "Clip > Rename...",
+    "Clip > Group",
+    "Clip > Ungroup",
+    "Clip > Edit Lock/Unlock",
+    // AudioSuite (shown as "Process"): speech processing only.
+    "AudioSuite > Noise Reduction",
+    "AudioSuite > EQ",
+    "AudioSuite > Dynamics",
+    "AudioSuite > Reverb",
+    "AudioSuite > Other > Normalize",
+    "AudioSuite > Other > Gain",
+    "AudioSuite > Other > DC Offset Removal",
+    // Options: playback only.
+    "Options > Loop Playback",
+    "Options > Insertion Follows Playback",
+    "Options > Edit Window Scrolling",
+    // Setup: audio device and the app.
+    "Setup > Hardware...",
+    "Setup > Playback Engine...",
+    "Setup > Keyboard Shortcuts...",
+    "Setup > Preferences...",
+    "Setup > Appearance",
+    // Window.
+    "Window > Edit",
+    "Window > Mix",
+    "Window > Memory Locations",
+    "Window > Clip List",
+    "Window > Transport",
+    "Window > Undo History",
+    "Window > Hide All Floating Windows",
+    "Window > Close Window",
+    "Window > Reset Panel Layout",
 ];
+
+/// How Podcast mode names a top-level menu: the plain word for Pro Tools jargon.
+pub fn menu_label(on: bool, label: &str) -> &str {
+    match label {
+        "AudioSuite" if on => "Process",
+        _ => label,
+    }
+}
 
 /// Built-in plugins the insert menus leave out in Podcast mode (A5): music effects. EQ, dynamics,
 /// the channel strip, one reverb, gain, trim, DC removal, dither, the saturator and third-party
@@ -155,7 +147,21 @@ pub fn offers_plugin(on: bool, id: &str) -> bool {
 }
 
 /// Edit window rulers hidden in Podcast mode (music timing and picture timebases).
-const HIDDEN_RULERS: &[&str] = &["bars_beats", "tempo", "tempo_editor", "meter", "key", "chords", "timecode", "timecode2", "feet_frames"];
+const HIDDEN_RULERS: &[&str] = &[
+    "bars_beats",
+    "tempo",
+    "tempo_editor",
+    "meter",
+    "key",
+    "chords",
+    "timecode",
+    "timecode2",
+    "feet_frames",
+    "markers2",
+    "markers3",
+    "markers4",
+    "markers5",
+];
 
 /// Windows a music or video workflow opens; switching Podcast mode on closes them.
 const CLOSE_ON_ENTER: &[&str] = &[
@@ -171,12 +177,11 @@ const CLOSE_ON_ENTER: &[&str] = &[
     "window.midi_ops",
 ];
 
-/// Whether Podcast mode hides the menu item or submenu at `path`.
+/// Whether Podcast mode hides the menu item or submenu at `path`: it shows only
+/// [`SHOWN_MENU_PATHS`], what is under them, and the submenus that lead to them.
 pub fn hides_path(path: &str) -> bool {
-    if let Some(width) = path.strip_prefix("Track > Change Track Width > ") {
-        return !matches!(width, "Mono" | "Stereo");
-    }
-    HIDDEN_MENU_PATHS.iter().any(|h| path == *h || path.strip_prefix(h).is_some_and(|rest| rest.starts_with(" > ")))
+    let under = |inner: &str, outer: &str| inner.strip_prefix(outer).is_some_and(|rest| rest.starts_with(" > "));
+    !SHOWN_MENU_PATHS.iter().any(|s| path == *s || under(path, s) || under(s, path))
 }
 
 /// Whether the New Tracks dialog offers this track kind in Podcast mode.
@@ -250,7 +255,7 @@ pub fn command(app: &mut SoundApp, p: &Value) -> Value {
 /// Episode template), opens a session or imports recordings.
 pub fn welcome(app: &mut SoundApp, ui: &mut egui::Ui, area: egui::Rect) {
     let t = crate::theme::Tokens::current();
-    let card = egui::Rect::from_center_size(area.center(), egui::vec2(360.0, 230.0).min(area.size()));
+    let card = egui::Rect::from_center_size(area.center(), egui::vec2(360.0, 260.0).min(area.size()));
     if card.width() < 120.0 || card.height() < 80.0 {
         return;
     }
@@ -273,6 +278,9 @@ pub fn welcome(app: &mut SoundApp, ui: &mut egui::Ui, area: egui::Rect) {
             }
             if ui.add(egui::Button::new("Open Session…").min_size(egui::vec2(180.0, 22.0))).clicked() {
                 pick = Some("session.open");
+            }
+            if ui.link("New to PodCraft? Quick Start Guide").clicked() {
+                pick = Some("window.quick_start");
             }
             if let Some(id) = pick
                 && !crate::menus::invoke_shortcut_dialog(app, id)
